@@ -508,19 +508,28 @@ export const PersonalDataSheetForm = ({ user, employees }) => {
             </tr>
           </thead>
           <tbody>
-            {serviceRecordsLedger.map((sr, idx) => (
+            {(formData.serviceRecords && formData.serviceRecords.length > 0 ? formData.serviceRecords : serviceRecordsLedger.map(sr => ({
+              inclusiveDateFrom: sr.effectiveDate,
+              inclusiveDateTo: 'Present',
+              positionTitle: sr.action,
+              departmentAgency: 'HSAC RAB 1',
+              monthlySalary: '-',
+              salaryGrade: '-',
+              statusOfAppointment: '-',
+              govService: 'Y'
+            }))).map((sr: any, idx: number) => (
               <tr key={idx}>
-                <td className="border border-black p-1">{sr.effectiveDate}</td>
-                <td className="border border-black p-1">Present</td>
-                <td className="border border-black p-1">{sr.action}</td>
-                <td className="border border-black p-1">HSAC RAB 1</td>
-                <td className="border border-black p-1">-</td>
-                <td className="border border-black p-1">-</td>
-                <td className="border border-black p-1">-</td>
-                <td className="border border-black p-1">Y</td>
+                <td className="border border-black p-1">{sr.inclusiveDateFrom}</td>
+                <td className="border border-black p-1">{sr.inclusiveDateTo}</td>
+                <td className="border border-black p-1">{sr.positionTitle}</td>
+                <td className="border border-black p-1">{sr.departmentAgency}</td>
+                <td className="border border-black p-1">{sr.monthlySalary}</td>
+                <td className="border border-black p-1">{sr.salaryGrade}</td>
+                <td className="border border-black p-1">{sr.statusOfAppointment}</td>
+                <td className="border border-black p-1">{sr.govService}</td>
               </tr>
             ))}
-             {serviceRecordsLedger.length === 0 && (
+             {(!formData.serviceRecords || formData.serviceRecords.length === 0) && serviceRecordsLedger.length === 0 && (
               <tr><td colSpan={8} className="border border-black p-4 text-gray-500 italic">No records provided</td></tr>
             )}
           </tbody>
@@ -543,17 +552,24 @@ export const PersonalDataSheetForm = ({ user, employees }) => {
             </tr>
           </thead>
           <tbody>
-            {trainingsLedger.map((trn, idx) => (
+            {(formData.trainings && formData.trainings.length > 0 ? formData.trainings : trainingsLedger.map(trn => ({
+              title: trn.title,
+              dateFrom: trn.dateConducted,
+              dateTo: trn.dateConducted,
+              trainingHours: trn.trainingHours,
+              typeOfLAndD: 'Technical',
+              organizer: trn.organizer
+            }))).map((trn: any, idx: number) => (
               <tr key={idx}>
                 <td className="border border-black p-1 text-left">{trn.title}</td>
-                <td className="border border-black p-1">{trn.dateConducted}</td>
-                <td className="border border-black p-1">{trn.dateConducted}</td>
+                <td className="border border-black p-1">{trn.dateFrom}</td>
+                <td className="border border-black p-1">{trn.dateTo}</td>
                 <td className="border border-black p-1">{trn.trainingHours}</td>
-                <td className="border border-black p-1">Technical</td>
+                <td className="border border-black p-1">{trn.typeOfLAndD}</td>
                 <td className="border border-black p-1">{trn.organizer}</td>
               </tr>
             ))}
-             {trainingsLedger.length === 0 && (
+             {(!formData.trainings || formData.trainings.length === 0) && trainingsLedger.length === 0 && (
               <tr><td colSpan={6} className="border border-black p-4 text-gray-500 italic">No records provided</td></tr>
             )}
           </tbody>
@@ -885,16 +901,22 @@ export const PersonalDataSheetForm = ({ user, employees }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {serviceRecordsLedger.map((sr, idx) => (
+                        {(formData.serviceRecords && formData.serviceRecords.length > 0 ? formData.serviceRecords : serviceRecordsLedger.map(sr => ({
+                          inclusiveDateFrom: sr.effectiveDate,
+                          inclusiveDateTo: 'Present',
+                          positionTitle: sr.action,
+                          departmentAgency: sr.newDetails,
+                          updatedBy: sr.updatedBy
+                        }))).map((sr: any, idx: number) => (
                           <tr key={idx} className="border-b border-slate-100">
-                            <td className="p-2 whitespace-nowrap">{sr.effectiveDate}</td>
-                            <td className="p-2 font-semibold text-slate-700">{sr.action}</td>
-                            <td className="p-2">{sr.newDetails}</td>
-                            <td className="p-2">{sr.updatedBy}</td>
+                            <td className="p-2 whitespace-nowrap">{sr.inclusiveDateFrom}</td>
+                            <td className="p-2 font-semibold text-slate-700">{sr.positionTitle}</td>
+                            <td className="p-2">{sr.departmentAgency}</td>
+                            <td className="p-2">{sr.updatedBy || 'AI Parsed'}</td>
                           </tr>
                         ))}
-                        {serviceRecordsLedger.length === 0 && (
-                          <tr><td colSpan="4" className="p-4 text-center text-slate-400 italic">No service records found.</td></tr>
+                        {(!formData.serviceRecords || formData.serviceRecords.length === 0) && serviceRecordsLedger.length === 0 && (
+                          <tr><td colSpan={4} className="p-4 text-center text-slate-400 italic">No service records found.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -919,21 +941,28 @@ export const PersonalDataSheetForm = ({ user, employees }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {trainingsLedger.map((trn, idx) => (
+                      {(formData.trainings && formData.trainings.length > 0 ? formData.trainings.map((t: any) => ({ ...t, status: 'Completed' })) : trainingsLedger.map(trn => ({
+                        title: trn.title,
+                        dateFrom: trn.dateConducted,
+                        dateTo: trn.dateConducted,
+                        trainingHours: trn.trainingHours,
+                        organizer: trn.organizer,
+                        status: trn.status
+                      }))).map((trn: any, idx: number) => (
                         <tr key={idx} className="border-b border-slate-100">
                           <td className="p-2 font-semibold text-slate-700">{trn.title}</td>
                           <td className="p-2">{trn.organizer}</td>
-                          <td className="p-2 text-center">{trn.dateConducted}</td>
+                          <td className="p-2 text-center">{trn.dateFrom || trn.dateConducted}</td>
                           <td className="p-2 text-center">{trn.trainingHours}</td>
                           <td className="p-2 text-center">
-                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${trn.status === 'Verified' ? 'bg-emerald-100 text-emerald-800' : trn.status === 'Returned' || trn.status === 'Rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
+                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${trn.status === 'Verified' || trn.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : trn.status === 'Returned' || trn.status === 'Rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
                               {trn.status || 'Pending Verification'}
                             </span>
                           </td>
                         </tr>
                       ))}
-                      {trainingsLedger.length === 0 && (
-                        <tr><td colSpan="5" className="p-4 text-center text-slate-400 italic">No training records found.</td></tr>
+                      {(!formData.trainings || formData.trainings.length === 0) && trainingsLedger.length === 0 && (
+                        <tr><td colSpan={5} className="p-4 text-center text-slate-400 italic">No training records found.</td></tr>
                       )}
                     </tbody>
                   </table>
