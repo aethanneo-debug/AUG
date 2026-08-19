@@ -15,7 +15,7 @@ export interface User {
   employeeId?: string;
   plantillaNumber?: string;
   salary?: number;
-  status?: "Active" | "Deactivated" | "Archived";
+  status?: "Active" | "Deactivated" | "Archived" | "Pending Password Change";
   passwordHash?: string;
   requirePasswordChange?: boolean;
   createdAt: string;

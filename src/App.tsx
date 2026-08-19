@@ -257,7 +257,6 @@ export default function App() {
         return <FinanceView 
           user={user}
           transactions={transactions}
-          employees={employees}
           fetchSummary={fetchSummary}
           onRefresh={triggerRefresh}
           activeSubTab={activeFinanceSubTab}
@@ -267,7 +266,6 @@ export default function App() {
         return <FinanceView 
           user={user}
           transactions={transactions}
-          employees={employees}
           fetchSummary={fetchSummary}
           onRefresh={triggerRefresh}
           activeSubTab="budgets"
@@ -290,7 +288,7 @@ export default function App() {
         return <RequestsView 
           user={user}
           requests={requests}
-          employees={employees}
+          fetchSummary={fetchSummary}
           supplies={supplies}
           onRefresh={triggerRefresh}
         />;
@@ -303,9 +301,8 @@ export default function App() {
           return <div id="access-denied" className="p-6 text-xs text-rose-500 font-mono font-bold">Unauthenticated credentials path error [RA 10173 Security Block].</div>;
         }
         return (
-          <EmployeePortalView 
+          <EmployeePortalView fetchSummary={fetchSummary} 
             user={user} 
-            fetchSummary={fetchSummary}
             onRefresh={triggerRefresh}
           />
         );

@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { GoogleGenAI, Type } from "@google/genai";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { 
   UserRole, 
@@ -903,11 +904,11 @@ function logEvent(userId: string, username: string, role: string, action: string
   saveDB();
 }
 
-app.get("/api/fiscal-years", authenticateToken, (req, res) => {
+app.get("/api/fiscal-years", authenticateToken, (req: any, res: any) => {
   res.json(db.fiscalYears || []);
 });
 
-app.get("/api/fiscal-years/active", authenticateToken, (req, res) => {
+app.get("/api/fiscal-years/active", authenticateToken, (req: any, res: any) => {
   const active = (db.fiscalYears || []).find((f: any) => f.status === "Active");
   res.json(active || { id: "fy-1", label: "2026", start_date: "2026-01-01", end_date: "2026-12-31", status: "Active", rollover_policy: "Standard" });
 });
@@ -1009,7 +1010,7 @@ app.post("/api/fiscal-years", authenticateToken, (req: any, res) => {
   res.json({ status: "success", data: newFy, hsacBudget: newHb });
 });
 
-app.get("/api/hsac-budgets", authenticateToken, (req, res) => {
+app.get("/api/hsac-budgets", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.hsacBudgets || [] });
 });
 
@@ -1028,7 +1029,7 @@ app.put("/api/hsac-budgets/:id", authenticateToken, (req: any, res) => {
 });
 
 
-app.get("/api/budgets", authenticateToken, (req, res) => {
+app.get("/api/budgets", authenticateToken, (req: any, res: any) => {
   let allocations = db.budgetAllocations || [];
   if (req.query.fiscalYearLabel) {
     const fy = (db.fiscalYears || []).find((f: any) => f.label === req.query.fiscalYearLabel);
@@ -1085,7 +1086,7 @@ function logFinanceAudit(user: string, action: string, module: string, previousV
 }
 
 // 1. Authentication Routes
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", (req: any, res: any) => {
   const { username, email, password } = req.body;
   const inputIdentifier = (username || email || "").trim().toLowerCase();
   
@@ -1173,7 +1174,7 @@ app.post("/api/auth/login", (req, res) => {
   }
 });
 
-app.post("/api/auth/logout", (req, res) => {
+app.post("/api/auth/logout", (req: any, res: any) => {
   res.json({ status: "success", message: "Session signed out successfully" });
 });
 
@@ -1238,7 +1239,27 @@ function authenticateToken(req: any, res: any, next: any) {
   try {
     const rawPayload = authHeader.split(" ")[1];
     const userJson = JSON.parse(Buffer.from(rawPayload, "base64").toString("utf8"));
-    req.user = userJson;
+    
+    // Check against DB for latest status
+    const dbUser = db.users.find(u => u.id === userJson.id);
+    if (!dbUser) {
+      return res.status(401).json({ status: "error", message: "User account no longer exists." });
+    }
+    
+    // Check pending password change
+    if (dbUser.status === "Pending Password Change") {
+      const allowedPaths = ["/api/auth/change-password", "/api/auth/logout", "/api/sessions/current"];
+      // If path is not allowed, reject
+      if (!allowedPaths.includes(req.path)) {
+        return res.status(403).json({ 
+          status: "error", 
+          message: "Temporary password active. You must change your password to continue.",
+          requirePasswordChange: true
+        });
+      }
+    }
+    
+    req.user = dbUser;
     next();
   } catch (err) {
     return res.status(403).json({ status: "error", message: "Malformed session verification token" });
@@ -1246,7 +1267,9 @@ function authenticateToken(req: any, res: any, next: any) {
 }
 
 app.get("/api/sessions/current", authenticateToken, (req: any, res) => {
-  res.json({ status: "success", data: req.user });
+  const user = req.user;
+  const responseUser = { ...user, requirePasswordChange: user.status === "Pending Password Change" };
+  res.json({ status: "success", data: responseUser });
 });
 
 // 2. Employee CRUD & Personnel Details
@@ -1484,7 +1507,7 @@ app.post("/api/employees/:employeeId/pds", authenticateToken, (req: any, res) =>
 });
 
 // Employee specific details (Training & History)
-app.get("/api/employees/:employeeId/trainings", authenticateToken, (req, res) => {
+app.get("/api/employees/:employeeId/trainings", authenticateToken, (req: any, res: any) => {
   const { employeeId } = req.params;
   const manualRecords = db.trainings.filter(t => t.employeeId === employeeId);
   
@@ -1512,7 +1535,7 @@ app.get("/api/employees/:employeeId/trainings", authenticateToken, (req, res) =>
   res.json({ status: "success", data: [...manualRecords, ...assignedRecords] });
 });
 
-app.get("/api/employees/:employeeId/assigned_activities", authenticateToken, (req, res) => {
+app.get("/api/employees/:employeeId/assigned_activities", authenticateToken, (req: any, res: any) => {
   const { employeeId } = req.params;
   const assignedRecords = db.trainingParticipants
     .filter(p => p.employeeId === employeeId && p.status !== "Liquidated" && p.status !== "Archived")
@@ -1539,7 +1562,7 @@ app.get("/api/employees/:employeeId/assigned_activities", authenticateToken, (re
   res.json({ status: "success", data: assignedRecords });
 });
 
-app.post("/api/employees/:employeeId/liquidate_activity/:participantId", authenticateToken, (req, res) => {
+app.post("/api/employees/:employeeId/liquidate_activity/:participantId", authenticateToken, (req: any, res: any) => {
   const { employeeId, participantId } = req.params;
   
   const pIndex = db.trainingParticipants.findIndex(p => p.id === participantId && p.employeeId === employeeId);
@@ -1578,7 +1601,7 @@ app.post("/api/employees/:employeeId/trainings", authenticateToken, (req: any, r
   res.json({ status: "success", data: newTraining });
 });
 
-app.get("/api/employees/:employeeId/history", authenticateToken, (req, res) => {
+app.get("/api/employees/:employeeId/history", authenticateToken, (req: any, res: any) => {
   const { employeeId } = req.params;
   const history = db.employmentHistory.filter(h => h.employeeId === employeeId);
   res.json({ status: "success", data: history });
@@ -1586,7 +1609,7 @@ app.get("/api/employees/:employeeId/history", authenticateToken, (req, res) => {
 
 
 // 3. Financial Document & Receipt Tracking Module
-app.get("/api/financial-transactions", authenticateToken, (req, res) => {
+app.get("/api/financial-transactions", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.financialTransactions });
 });
 
@@ -1763,7 +1786,7 @@ app.post("/api/financial-transactions/:id/documents/:docId/replace", authenticat
 });
 
 // --- NEW LIQUIDATION WORKFLOW ENDPOINTS (READ-ONLY MONITORING FOR LEGACY CONTEXT) ---
-app.get("/api/finance/liquidations", authenticateToken, (req, res) => {
+app.get("/api/finance/liquidations", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.liquidations || [] });
 });
 
@@ -1801,7 +1824,7 @@ app.post("/api/pds", authenticateToken, (req: any, res) => {
 });
 
 // --- DYNAMIC PERMANENT ACTIVITY-BUDGET LINKING ENDPOINTS ---
-app.get("/api/finance/activity-budget-links", authenticateToken, (req, res) => {
+app.get("/api/finance/activity-budget-links", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.activityBudgetLinks || [] });
 });
 
@@ -1853,7 +1876,7 @@ app.post("/api/finance/activity-budget-links", authenticateToken, (req: any, res
 });
 
 // --- NEW BUDGET MANAGEMENT ENDPOINTS ---
-app.get("/api/finance/budgets", authenticateToken, (req, res) => {
+app.get("/api/finance/budgets", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.budgetAllocations || [] });
 });
 
@@ -1964,7 +1987,7 @@ app.put("/api/finance/budgets/:id", authenticateToken, (req: any, res) => {
   res.json({ status: "success", data: budget });
 });
 
-app.get("/api/finance/budget-requests", authenticateToken, (req, res) => {
+app.get("/api/finance/budget-requests", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.budgetRequests || [] });
 });
 
@@ -1977,7 +2000,7 @@ app.post("/api/finance/budget-requests", authenticateToken, (req: any, res) => {
     requestType,
     purpose,
     status: "Pending",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
   if (!db.budgetRequests) {
     db.budgetRequests = [];
@@ -2037,7 +2060,7 @@ app.post("/api/finance/budget-requests/:id/action", authenticateToken, (req: any
   res.json({ status: "success", data: reqItem });
 });
 
-app.get("/api/budget-requests", authenticateToken, (req, res) => {
+app.get("/api/budget-requests", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.budgetRequests || [] });
 });
 
@@ -2091,13 +2114,13 @@ app.put("/api/budget-requests/:id/approve", authenticateToken, (req: any, res) =
 });
 
 // --- NEW FINANCE AUDIT ENDPOINT ---
-app.get("/api/finance/audit-logs", authenticateToken, (req, res) => {
+app.get("/api/finance/audit-logs", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.financeAuditLogs || [] });
 });
 
 
 // 4. Property Accountability, Assets & Supply Monitoring Module
-app.get("/api/assets", authenticateToken, (req, res) => {
+app.get("/api/assets", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.assets });
 });
 
@@ -2232,7 +2255,7 @@ app.post("/api/assets/:id/return", authenticateToken, (req: any, res) => {
 });
 
 // Supply Inventory list
-app.get("/api/supplies", authenticateToken, (req, res) => {
+app.get("/api/supplies", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.supplyItems });
 });
 
@@ -2258,7 +2281,7 @@ app.post("/api/supplies", authenticateToken, (req: any, res) => {
 });
 
 // Direct issue of supplies to administrative offices
-app.get("/api/supplies/issuances", authenticateToken, (req, res) => {
+app.get("/api/supplies/issuances", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.supplyIssuances });
 });
 
@@ -2618,6 +2641,37 @@ app.get("/api/admin/users", authenticateToken, (req: any, res) => {
   res.json({ status: "success", data: db.users });
 });
 
+
+// Test Email Route
+app.post("/api/admin/test-email", authenticateToken, async (req: any, res: any) => {
+  if (req.user.role !== UserRole.SUPER_ADMIN) {
+    return res.status(403).json({ status: "error", message: "Requires Administrator / Division Chief privileges" });
+  }
+  
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return res.status(400).json({ status: "error", message: "SMTP credentials are not configured in the environment secrets." });
+  }
+
+  const { targetEmail } = req.body;
+  if (!targetEmail) {
+    return res.status(400).json({ status: "error", message: "Target email is required." });
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: '"IntegraSync Test" <' + process.env.SMTP_USER + '>',
+      to: targetEmail,
+      subject: 'IntegraSync - Email System Test',
+      text: 'If you are reading this, the IntegraSync email system is working correctly!'
+    });
+    console.log("Test email sent successfully:", info.response);
+    res.json({ status: "success", message: "Test email sent successfully. Check your inbox!" });
+  } catch (error: any) {
+    console.error("Test email failed:", error);
+    res.status(500).json({ status: "error", message: "Failed to send email: " + error.message });
+  }
+});
+
 app.post("/api/admin/users", authenticateToken, (req: any, res) => {
   if ((req as any).user.role !== UserRole.SUPER_ADMIN) {
     return res.status(403).json({ status: "error", message: "Requires Administrator / Division Chief privileges" });
@@ -2653,21 +2707,46 @@ app.post("/api/admin/users", authenticateToken, (req: any, res) => {
   db.employees.push(newEmployee);
 
   // Create User
+  
+  const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 char temp password
+  const salt = crypto.randomBytes(16).toString('hex');
+  const tempPasswordHash = crypto.pbkdf2Sync(tempPassword, salt, 1000, 64, 'sha512').toString('hex');
+
   const newUser = {
     id: `u-${Date.now()}`,
     username,
     email,
     fullName,
     role,
-    status: status || "Active",
+    status: "Pending Password Change" as "Pending Password Change",
     employeeId,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    passwordHash: `${salt}:${tempPasswordHash}`
   };
 
   db.users.push(newUser);
   logEvent((req as any).user.id, (req as any).user.username, (req as any).user.role, "Create User Account", `Created digital user: ${username} and employee ${employeeId}`);
   saveDB();
-  res.json({ status: "success", data: newUser });
+  
+  // Dispatch Temporary Password via Email
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      transporter.sendMail({
+        from: '"IntegraSync Security" <' + process.env.SMTP_USER + '>',
+        to: email,
+        subject: 'IntegraSync - Your Temporary Password',
+        text: `Hello ${fullName},\n\nAn account has been created for you on the IntegraSync System.\n\nUsername/Email: ${email}\nTemporary Password: ${tempPassword}\n\nFor security purposes, you will be required to change this password immediately upon your first login.\n\nThank you,\nIntegraSync Administrator`
+      }).catch(err => console.error("SMTP async error:", err));
+      console.log(`[Email Dispatch] Sent temporary password to ${email}`);
+    } catch (error) {
+      console.error(`[Email Dispatch] Failed to send email to ${email}:`, error);
+    }
+  } else {
+    console.warn(`[Email Dispatch] SMTP credentials not configured in environment. Skipped sending email to ${email}`);
+  }
+
+  res.json({ status: "success", data: newUser, tempPassword });
+
 });
 
 app.put("/api/admin/users/:id", authenticateToken, (req: any, res) => {
@@ -3184,11 +3263,12 @@ app.put("/api/liquidation-submissions/:id/finance-action", authenticateToken, (r
       db.trainingLiquidations.push({
         id: `tliq-${Date.now()}`,
         trainingProgramId: tPart.trainingProgramId,
-        expenseCategory: "Liquidation Report (Employee)",
+        expenseCategory: "Miscellaneous",
         description: sub.remarks || "Employee submitted liquidation",
         amount: sub.totalSpent,
         dateIncurred: new Date().toISOString().split("T")[0],
-        recordedBy: sub.employeeName
+        submittedBy: sub.employeeId,
+        status: "Approved"
       });
       
       // Update the usedBudget in trainingPrograms
@@ -3380,11 +3460,11 @@ app.put("/api/liquidation-submissions/:id/chief-action", authenticateToken, (req
 // TRAINING & DEVELOPMENT MANAGEMENT SYSTEM
 // ==========================================
 
-app.get("/api/training/budgets", authenticateToken, (req, res) => {
+app.get("/api/training/budgets", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.trainingBudgets || [] });
 });
 
-app.post("/api/training/budgets", authenticateToken, (req, res) => {
+app.post("/api/training/budgets", authenticateToken, (req: any, res: any) => {
   if ((req as any).user.role !== UserRole.SUPER_ADMIN && (req as any).user.role !== UserRole.BUDGET_OFFICER) {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
@@ -3405,11 +3485,11 @@ app.post("/api/training/budgets", authenticateToken, (req, res) => {
   res.json({ status: "success", data: newBudget });
 });
 
-app.get("/api/training/programs", authenticateToken, (req, res) => {
+app.get("/api/training/programs", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.trainingPrograms || [] });
 });
 
-app.post("/api/training/programs", authenticateToken, (req, res) => {
+app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
   if ((req as any).user.role !== UserRole.SUPER_ADMIN && (req as any).user.role !== UserRole.HR_OFFICER) {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
@@ -3443,7 +3523,7 @@ app.post("/api/training/programs", authenticateToken, (req, res) => {
     maxParticipants: parseInt(body.maxParticipants),
     targetSpecialization: body.targetSpecialization,
     targetDivision: body.targetDivision,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 
   db.trainingPrograms.push(newProgram);
@@ -3467,7 +3547,7 @@ app.post("/api/training/programs", authenticateToken, (req, res) => {
 
 
 
-app.put("/api/training/programs/:id", authenticateToken, (req, res) => {
+app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) => {
   if (req.user.role !== "Super Admin" && req.user.role !== "HR Officer") {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
@@ -3522,7 +3602,7 @@ app.put("/api/training/programs/:id", authenticateToken, (req, res) => {
   res.json({ status: "success", data: db.trainingPrograms[programIndex] });
 });
 
-app.delete("/api/training/programs/:id", authenticateToken, (req, res) => {
+app.delete("/api/training/programs/:id", authenticateToken, (req: any, res: any) => {
   if (req.user.role !== "Super Admin" && req.user.role !== "HR Officer") {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
@@ -3533,7 +3613,7 @@ app.delete("/api/training/programs/:id", authenticateToken, (req, res) => {
   res.json({ status: "success" });
 });
 
-app.post("/api/training/participants/:id/approve_liquidation", authenticateToken, (req, res) => {
+app.post("/api/training/participants/:id/approve_liquidation", authenticateToken, (req: any, res: any) => {
   const { id } = req.params;
   
   if ((req as any).user.role !== UserRole.SUPER_ADMIN && (req as any).user.role !== UserRole.HR_OFFICER) {
@@ -3557,11 +3637,11 @@ app.post("/api/training/participants/:id/approve_liquidation", authenticateToken
   }
 });
 
-app.get("/api/training/participants", authenticateToken, (req, res) => {
+app.get("/api/training/participants", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.trainingParticipants || [] });
 });
 
-app.post("/api/training/participants", authenticateToken, (req, res) => {
+app.post("/api/training/participants", authenticateToken, (req: any, res: any) => {
   const { trainingProgramId, employeeId } = req.body;
   const prog = db.trainingPrograms.find(p => p.id === trainingProgramId);
   
@@ -3584,11 +3664,11 @@ app.post("/api/training/participants", authenticateToken, (req, res) => {
   res.json({ status: "success", data: part });
 });
 
-app.get("/api/training/liquidations", authenticateToken, (req, res) => {
+app.get("/api/training/liquidations", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.trainingLiquidations || [] });
 });
 
-app.post("/api/training/liquidations", authenticateToken, (req, res) => {
+app.post("/api/training/liquidations", authenticateToken, (req: any, res: any) => {
   const { trainingProgramId, expenseCategory, description, amount, receiptFileName, dateIncurred } = req.body;
   const amt = parseFloat(amount);
   
@@ -3781,7 +3861,7 @@ if (process.env.NODE_ENV !== "production") {
 } else {
   const distPath = path.join(process.cwd(), "dist");
   app.use(express.static(distPath));
-  app.get("*", (req, res) => {
+  app.get("*", (req: any, res: any) => {
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
