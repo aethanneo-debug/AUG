@@ -7,6 +7,9 @@ dotenv.config();
 import { GoogleGenAI, Type } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "integra-sync-secure-capstone-key";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -1149,8 +1152,8 @@ app.post("/api/auth/login", (req: any, res: any) => {
       return res.status(403).json({ status: "error", message: "This user credentials account is Deactivated. Please consult the Division Chief / Administrator." });
     }
 
-    // Return a mocked JWT containing the profile data
-    const tokenPayload = Buffer.from(JSON.stringify({
+    // Generate a cryptographically secure JWT
+    const payload = {
       id: user.id,
       username: user.username,
       email: user.email,
@@ -1158,7 +1161,8 @@ app.post("/api/auth/login", (req: any, res: any) => {
       role: user.role,
       employeeId: user.employeeId,
       requirePasswordChange: user.requirePasswordChange
-    })).toString("base64");
+    };
+    const tokenPayload = jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" });
 
     logEvent(user.id, user.username, user.role, "Login", "Successful authenticated session login via credentials.");
 
@@ -1234,6 +1238,9 @@ app.post("/api/auth/change-password", authenticateToken, (req: any, res) => {
   const hash = crypto.pbkdf2Sync(newPassword, salt, 1000, 64, 'sha512').toString('hex');
   user.passwordHash = `${salt}:${hash}`;
   user.requirePasswordChange = false;
+  if (user.status === "Pending Password Change") {
+    user.status = "Active";
+  }
 
   logEvent(user.id, user.username, user.role, "Change Password", "User successfully modified/updated login credentials.");
   saveDB();
@@ -1250,7 +1257,8 @@ function authenticateToken(req: any, res: any, next: any) {
 
   try {
     const rawPayload = authHeader.split(" ")[1];
-    const userJson = JSON.parse(Buffer.from(rawPayload, "base64").toString("utf8"));
+    // Verify cryptographic signature of JWT
+    const userJson = jwt.verify(rawPayload, JWT_SECRET) as any;
     
     // Check against DB for latest status
     const dbUser = db.users.find(u => u.id === userJson.id);
