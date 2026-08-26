@@ -203,6 +203,10 @@ export default function FinanceView({
       if (resHb.status === "success") {
         setHsacBudgets(resHb.data || []);
       }
+      const resTb = await apiCall("/api/training/budgets").catch(() => ({ status: "error", data: [] }));
+      if (resTb.status === "success") {
+        setTrainingBudgets(resTb.data || []);
+      }
       const resBudReq = await apiCall("/api/finance/budget-requests").catch(() => ({ status: "error", data: [] }));
       if (resBudReq.status === "success") {
         setBudgetRequests(resBudReq.data || []);

@@ -99,7 +99,7 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
     setSuccess("");
 
     if (!username || !email || !fullName || (!editingUser && (!employeeId || !position || !division))) {
-      setError("Please fill out all mandatory credentials fields (including Employee ID, Position, and Division for new accounts).");
+      setError("Please fill out all mandatory credentials fields (including Plantilla ID, Position, and Division for new accounts).");
       return;
     }
 
@@ -186,10 +186,10 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-all cursor-pointer"
+          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-all cursor-pointer"
         >
-          <Plus size={15} />
-          <span>Provision New Account</span>
+          <Plus size={16} />
+          <span>Create New User Account</span>
         </button>
       </div>
 
@@ -234,7 +234,7 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
                   <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">System Username</th>
                   <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">Email Address</th>
                   <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">Access Level Role</th>
-                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">Employee ID</th>
+                  <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">Plantilla ID</th>
                   <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono">Status</th>
                   <th className="px-6 py-3.5 text-[10px] font-bold text-slate-400 uppercase font-mono text-right">Actions</th>
                 </tr>
@@ -382,7 +382,7 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
           <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-md w-full overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-800">
-                {editingUser ? "Edit User Authority Settings" : "Provision New Identity logon"}
+                {editingUser ? "Edit User Account" : "Create New User Account"}
               </h2>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <X size={16} />
@@ -391,49 +391,49 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {error && (
-                <div className="p-3 bg-rose-50 border-l-2 border-rose-500 text-rose-700 text-xs font-mono">
+                <div className="p-3 bg-rose-50 border-l-2 border-rose-500 text-rose-700 text-xs">
                   {error}
                 </div>
               )}
               {success && (
-                <div className="p-3 bg-emerald-50 border-l-2 border-emerald-500 text-emerald-700 text-xs font-sans">
+                <div className="p-3 bg-emerald-50 border-l-2 border-emerald-500 text-emerald-700 text-xs">
                   {success}
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Full Name</label>
+                <label className="text-xs font-semibold text-slate-600">Full Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Maria Clara Santos"
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">System Username</label>
+                  <label className="text-xs font-semibold text-slate-600">Username</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. clara"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Email Address</label>
+                  <label className="text-xs font-semibold text-slate-600">Email Address</label>
                   <input
                     type="email"
                     required
                     placeholder="e.g. clara@hsac.gov.ph"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -441,37 +441,37 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
               {!editingUser && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Employee ID</label>
-                    <input type="text" value={employeeId} onChange={e => setEmployeeId(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" required placeholder="EMP-001" />
+                    <label className="text-xs font-semibold text-slate-600">Plantilla ID</label>
+                    <input type="text" value={employeeId} onChange={e => setEmployeeId(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" required placeholder="EMP-001" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Division / Department</label>
-                    <select value={division} onChange={e => setDivision(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" required>
+                    <label className="text-xs font-semibold text-slate-600">Division / Department</label>
+                    <select value={division} onChange={e => setDivision(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" required>
                       <option value="Adjudication Division">Adjudication Division</option>
                       <option value="Legal Division">Legal Division</option>
                       <option value="Administrative and Finance Division">Administrative and Finance Division</option>
-                      <option value="Records Division">Records Division</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Position / Role</label>
-                    <input type="text" value={position} onChange={e => setPosition(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono" required placeholder="e.g. Attorney III" />
+                    <label className="text-xs font-semibold text-slate-600">Position / Role</label>
+                    <input type="text" value={position} onChange={e => setPosition(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" required placeholder="e.g. Attorney III" />
                   </div>
                 </>
               )}
+
               {editingUser && (
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Employee ID (Locked)</label>
-                  <input type="text" value={employeeId} disabled className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-500 font-mono" />
+                  <label className="text-xs font-semibold text-slate-600">Plantilla ID (Locked)</label>
+                  <input type="text" value={employeeId} disabled className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed" />
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Clearance & Role</label>
+                <label className="text-xs font-semibold text-slate-600">System Role</label>
                 <select
                   value={selectedRole}
                   onChange={e => setSelectedRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
                   <option value={UserRole.SUPER_ADMIN}>Administrator / Division Chief</option>
                   <option value={UserRole.HR_OFFICER}>HR Officer</option>
@@ -482,31 +482,30 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase font-mono">Logon Status</label>
+                <label className="text-xs font-semibold text-slate-600">Account Status</label>
                 <select
                   value={accountStatus}
                   onChange={e => setAccountStatus(e.target.value as "Active" | "Archived")}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
                   <option value="Active">Active</option>
-                  
                   <option value="Archived">Archived</option>
                 </select>
               </div>
 
-              <div className="pt-4 flex items-center justify-end space-x-2">
+              <div className="pt-4 flex items-center justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+                  className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg cursor-pointer"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg shadow-sm transition-colors cursor-pointer"
                 >
-                  {editingUser ? "Seal Configuration" : "Provision logon"}
+                  {editingUser ? "Save Changes" : "Create Account"}
                 </button>
               </div>
             </form>

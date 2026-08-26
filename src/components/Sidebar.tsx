@@ -148,8 +148,7 @@ export default function Sidebar({
         <div className="p-4 border-b border-slate-800 flex items-center space-x-3 bg-slate-950">
           <HsacLogo size={36} className="shrink-0 bg-white rounded-full p-0.5 border border-blue-600/35" />
           <div>
-            <h1 className="text-sm font-bold tracking-tight text-white line-clamp-1">HSAC RAB 1</h1>
-            <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">IPFMS Portal</p>
+            <h1 className="text-sm font-bold tracking-tight text-white line-clamp-1">HSAC RAB 1 SYSTEM</h1>
           </div>
         </div>
 
