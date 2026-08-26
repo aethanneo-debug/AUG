@@ -1,9 +1,21 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import dotenv from "dotenv";
+dotenv.config();
+
 import { GoogleGenAI, Type } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
 import { createServer as createViteServer } from "vite";
 import { 
   UserRole, 
