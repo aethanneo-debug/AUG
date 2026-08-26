@@ -2684,7 +2684,7 @@ app.post("/api/admin/test-email", authenticateToken, async (req: any, res: any) 
   }
 });
 
-app.post("/api/admin/users", authenticateToken, (req: any, res) => {
+app.post("/api/admin/users", authenticateToken, async (req: any, res) => {
   if ((req as any).user.role !== UserRole.SUPER_ADMIN) {
     return res.status(403).json({ status: "error", message: "Requires Administrator / Division Chief privileges" });
   }
@@ -2743,13 +2743,13 @@ app.post("/api/admin/users", authenticateToken, (req: any, res) => {
   // Dispatch Temporary Password via Email
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     try {
-      transporter.sendMail({
+      const info = await transporter.sendMail({
         from: '"IntegraSync Security" <' + process.env.SMTP_USER + '>',
         to: email,
         subject: 'IntegraSync - Your Temporary Password',
         text: `Hello ${fullName},\n\nAn account has been created for you on the IntegraSync System.\n\nUsername/Email: ${email}\nTemporary Password: ${tempPassword}\n\nFor security purposes, you will be required to change this password immediately upon your first login.\n\nThank you,\nIntegraSync Administrator`
-      }).catch(err => console.error("SMTP async error:", err));
-      console.log(`[Email Dispatch] Sent temporary password to ${email}`);
+      });
+      console.log(`[Email Dispatch] Sent temporary password to ${email}. Response: ${info.response}`);
     } catch (error) {
       console.error(`[Email Dispatch] Failed to send email to ${email}:`, error);
     }

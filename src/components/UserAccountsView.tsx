@@ -184,13 +184,38 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
           <h1 className="text-xl font-bold font-sans text-slate-800 tracking-tight">User Account & Credentials Deck</h1>
           <p className="text-xs text-slate-500 font-sans mt-0.5">Define access categories, audit clearances, and provision active user logons.</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-all cursor-pointer"
-        >
-          <Plus size={16} />
-          <span>Create New User Account</span>
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={async () => {
+              const testEmail = prompt("Enter an email address to send a test email to (e.g. your Gmail):");
+              if (!testEmail) return;
+              try {
+                const res = await apiCall("/api/admin/test-email", {
+                  method: "POST",
+                  body: JSON.stringify({ targetEmail: testEmail })
+                });
+                if (res.status === "success") {
+                  alert(res.message);
+                } else {
+                  alert("Error: " + res.message);
+                }
+              } catch (err: any) {
+                alert("Failed to send test email: " + err.message);
+              }
+            }}
+            className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-lg border border-slate-200 shadow-sm transition-all cursor-pointer"
+          >
+            <Mail size={16} />
+            <span>Test Email Dispatcher</span>
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>Create New User Account</span>
+          </button>
+        </div>
       </div>
 
 
