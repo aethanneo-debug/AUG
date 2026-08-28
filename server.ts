@@ -2765,7 +2765,7 @@ app.post("/api/admin/users", authenticateToken, async (req: any, res) => {
     console.warn(`[Email Dispatch] SMTP credentials not configured in environment. Skipped sending email to ${email}`);
   }
 
-  res.json({ status: "success", data: newUser, tempPassword });
+  res.json({ status: "success", data: newUser });
 
 });
 
@@ -3724,6 +3724,10 @@ app.post("/api/pds/parse", authenticateToken, async (req: any, res) => {
     
     if (!base64Data) {
       return res.status(400).json({ status: "error", message: "No file data provided" });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(400).json({ status: "error", message: "GEMINI_API_KEY is missing from your .env file. Please add it and restart the server." });
     }
 
     const ai = new GoogleGenAI({ 
