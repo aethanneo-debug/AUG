@@ -420,31 +420,43 @@ export default function App() {
   return (
     <div id="applet-viewport-frame" className="h-screen w-screen flex overflow-hidden bg-slate-50 text-slate-800 font-sans font-sans">
       
-      {/* SIDEBAR NAVIGATION */}
-      <Sidebar 
-        user={user} 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        onLogout={handleSignOut}
-        onChangePassword={() => setShowPasswordChangeModal(true)}
-        activeFinanceSubTab={activeFinanceSubTab}
-        setActiveFinanceSubTab={setActiveFinanceSubTab}
-      />
+      {!user.requirePasswordChange ? (
+        <>
+          {/* SIDEBAR NAVIGATION */}
+          <Sidebar 
+            user={user} 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            onLogout={handleSignOut}
+            onChangePassword={() => setShowPasswordChangeModal(true)}
+            activeFinanceSubTab={activeFinanceSubTab}
+            setActiveFinanceSubTab={setActiveFinanceSubTab}
+          />
 
-      {/* CORE WORKSPACE FRAME */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        
-        {/* HEADER BRAND AND CLOCK */}
-        <Header 
-          user={user} 
-          onOpenHelp={() => setHelpOpen(true)}
-        />
+          {/* CORE WORKSPACE FRAME */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            
+            {/* HEADER BRAND AND CLOCK */}
+            <Header 
+              user={user} 
+              onOpenHelp={() => setHelpOpen(true)}
+            />
 
-        {/* ACTIVE MODULE CONTAINER SCREEN */}
-        <main className="flex-1 flex overflow-y-auto">
-          {renderActiveView()}
-        </main>
-      </div>
+            {/* ACTIVE MODULE CONTAINER SCREEN */}
+            <main className="flex-1 flex overflow-y-auto">
+              {renderActiveView()}
+            </main>
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-900 text-slate-400">
+          <ShieldCheck size={48} className="text-slate-700 mb-4 opacity-50" />
+          <h2 className="text-xl font-bold text-white mb-2 tracking-wide">ACCOUNT SECURITY LOCK</h2>
+          <p className="max-w-md text-sm leading-relaxed">
+            Administrative protocol requires you to update your temporary credential password before proceeding to the centralized workspace.
+          </p>
+        </div>
+      )}
 
       {/* SYSTEM DOCUMENTATION MODAL OVERLAY */}
       {helpOpen && (
@@ -649,6 +661,7 @@ export default function App() {
                       setCurrentPasswordInput("");
                       setNewPasswordInput("");
                       setConfirmPasswordInput("");
+                      setUser((prev: any) => prev ? { ...prev, requirePasswordChange: false } : prev);
                       triggerRefresh();
                     } else {
                       setPasswordChangeError(res.message || "Failed to update password.");

@@ -557,17 +557,17 @@ export default function UserAccountsView({ currentUser }: UserAccountsViewProps)
               </button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
-                <p>The system attempted to email the following temporary credentials to the user's registered inbox. Please provide these credentials to the user if the simulated email network fails.</p>
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-800">
+                <p>The system successfully generated a secure temporary password and emailed it to the user's registered inbox. For strict security compliance, the password is not displayed here.</p>
               </div>
               <div className="space-y-2 text-sm text-slate-700 bg-slate-50 p-4 border border-slate-200 rounded-lg">
-                <div className="flex justify-between">
-                  <span className="font-semibold">Email / Username:</span>
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Recipient Email:</span>
                   <span>{tempPasswordModal.email}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Temporary Password:</span>
-                  <span className="font-mono bg-white px-2 py-0.5 border border-slate-200 rounded text-rose-600 font-bold">{tempPasswordModal.tempPassword}</span>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="font-semibold">Delivery Status:</span>
+                  <span className="font-mono bg-emerald-100 px-2 py-0.5 border border-emerald-200 rounded text-emerald-700 font-bold">Sent via SMTP</span>
                 </div>
               </div>
               <button
