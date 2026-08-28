@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiCall } from '../utils';
 import { Upload, Loader2 } from 'lucide-react';
 
-export const PersonalDataSheetForm = ({ user, employees }) => {
+export const PersonalDataSheetForm = ({ user, employees, onSuccess }: any) => {
   const isHrOrAdmin = ["Administrator / Division Chief", "HR Officer"].includes(user.role);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(isHrOrAdmin ? "" : user.employeeId);
   const [activeTab, setActiveTab] = useState(1);
@@ -251,7 +251,8 @@ export const PersonalDataSheetForm = ({ user, employees }) => {
       });
       setSuccessMsg("PDS information saved successfully.");
       setReloadTrigger(prev => prev + 1);
-    } catch (err) {
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
       setErrorMsg("Error saving PDS: " + err.message);
     } finally {
       setLoading(false);

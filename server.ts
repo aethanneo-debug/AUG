@@ -1154,6 +1154,14 @@ app.post("/api/auth/login", (req: any, res: any) => {
 
     const requirePasswordChange = user.status === "Pending Password Change" || user.requirePasswordChange === true;
 
+    let requirePdsUpload = false;
+    if (!requirePasswordChange && user.employeeId) {
+      const emp = db.employees.find(e => e.employeeId === user.employeeId);
+      if (emp && !emp.pdsFieldName) {
+        requirePdsUpload = true;
+      }
+    }
+
     // Generate a cryptographically secure JWT
     const payload = {
       id: user.id,
@@ -1162,7 +1170,8 @@ app.post("/api/auth/login", (req: any, res: any) => {
       fullName: user.fullName,
       role: user.role,
       employeeId: user.employeeId,
-      requirePasswordChange: requirePasswordChange
+      requirePasswordChange: requirePasswordChange,
+      requirePdsUpload: requirePdsUpload
     };
     const tokenPayload = jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" });
 
@@ -1175,7 +1184,8 @@ app.post("/api/auth/login", (req: any, res: any) => {
       fullName: user.fullName,
       role: user.role,
       employeeId: user.employeeId,
-      requirePasswordChange: requirePasswordChange
+      requirePasswordChange: requirePasswordChange,
+      requirePdsUpload: requirePdsUpload
     };
 
     res.json({
@@ -1279,6 +1289,29 @@ function authenticateToken(req: any, res: any, next: any) {
           requirePasswordChange: true
         });
       }
+    } else if (dbUser.employeeId) {
+      // Check PDS requirement
+      const emp = db.employees.find(e => e.employeeId === dbUser.employeeId);
+      if (emp && !emp.pdsFieldName) {
+        // Allow PDS upload paths
+        const allowedPaths = [
+          "/api/auth/logout", 
+          "/api/sessions/current",
+          "/api/employees/me",
+          `/api/employees/${dbUser.employeeId}/pds-profile`,
+          `/api/employees/${dbUser.employeeId}/pds`,
+          "/api/pds/parse"
+        ];
+        
+        const pathIsAllowed = allowedPaths.includes(req.path);
+        if (!pathIsAllowed) {
+           return res.status(403).json({ 
+             status: "error", 
+             message: "Personal Data Sheet (PDS) upload is required before accessing the system.",
+             requirePdsUpload: true
+           });
+        }
+      }
     }
     
     req.user = dbUser;
@@ -1290,7 +1323,18 @@ function authenticateToken(req: any, res: any, next: any) {
 
 app.get("/api/sessions/current", authenticateToken, (req: any, res) => {
   const user = req.user;
-  const responseUser = { ...user, requirePasswordChange: user.status === "Pending Password Change" };
+  let requirePdsUpload = false;
+  if (user.status !== "Pending Password Change" && user.employeeId) {
+    const emp = db.employees.find(e => e.employeeId === user.employeeId);
+    if (emp && !emp.pdsFieldName) {
+      requirePdsUpload = true;
+    }
+  }
+  const responseUser = { 
+    ...user, 
+    requirePasswordChange: user.status === "Pending Password Change",
+    requirePdsUpload
+  };
   res.json({ status: "success", data: responseUser });
 });
 

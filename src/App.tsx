@@ -420,7 +420,7 @@ export default function App() {
   return (
     <div id="applet-viewport-frame" className="h-screen w-screen flex overflow-hidden bg-slate-50 text-slate-800 font-sans font-sans">
       
-      {!user.requirePasswordChange ? (
+      {!user.requirePasswordChange && !user.requirePdsUpload ? (
         <>
           {/* SIDEBAR NAVIGATION */}
           <Sidebar 
@@ -448,13 +448,31 @@ export default function App() {
             </main>
           </div>
         </>
-      ) : (
+      ) : user.requirePasswordChange ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-900 text-slate-400">
           <ShieldCheck size={48} className="text-slate-700 mb-4 opacity-50" />
           <h2 className="text-xl font-bold text-white mb-2 tracking-wide">ACCOUNT SECURITY LOCK</h2>
           <p className="max-w-md text-sm leading-relaxed">
             Administrative protocol requires you to update your temporary credential password before proceeding to the centralized workspace.
           </p>
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
+          <Header user={user} onOpenHelp={() => setHelpOpen(true)} />
+          <main className="flex-1 flex flex-col items-center p-8 overflow-y-auto">
+            <div className="w-full max-w-4xl bg-white rounded-xl shadow-xl overflow-hidden p-6 border border-rose-200">
+              <div className="bg-rose-50 border-l-4 border-rose-500 p-4 mb-6 rounded-r-lg">
+                <div className="flex items-center space-x-3 text-rose-800">
+                  <ShieldCheck size={24} />
+                  <div>
+                    <h3 className="font-bold text-sm uppercase tracking-wide">PDS Upload Required</h3>
+                    <p className="text-xs">Your employment record is incomplete. You must upload your Personal Data Sheet (PDS) to unlock your digital workspace and dashboard access.</p>
+                  </div>
+                </div>
+              </div>
+              <PersonalDataSheetForm user={user} employees={[]} onSuccess={checkSession} />
+            </div>
+          </main>
         </div>
       )}
 
