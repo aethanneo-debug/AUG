@@ -653,16 +653,16 @@ export default function App() {
                       })
                     });
                                         if (res.status === "success") {
-                      if (res.token) {
-                        localStorage.setItem("ipfms_token", res.token);
+                      if (user?.requirePasswordChange) {
+                        alert("Password updated successfully! For security purposes, you will now be logged out. Please log in again using your new credentials.");
+                      } else {
+                        alert("Password updated successfully! You will now be logged out to verify your new credentials.");
                       }
-                      alert("Password updated successfully! Welcome to your official HSAC workspace.");
                       setShowPasswordChangeModal(false);
                       setCurrentPasswordInput("");
                       setNewPasswordInput("");
                       setConfirmPasswordInput("");
-                      setUser((prev: any) => prev ? { ...prev, requirePasswordChange: false } : prev);
-                      triggerRefresh();
+                      handleSignOut();
                     } else {
                       setPasswordChangeError(res.message || "Failed to update password.");
                     }
