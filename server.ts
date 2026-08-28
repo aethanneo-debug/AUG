@@ -1152,6 +1152,8 @@ app.post("/api/auth/login", (req: any, res: any) => {
       return res.status(403).json({ status: "error", message: "This user credentials account is Deactivated. Please consult the Division Chief / Administrator." });
     }
 
+    const requirePasswordChange = user.status === "Pending Password Change" || user.requirePasswordChange === true;
+
     // Generate a cryptographically secure JWT
     const payload = {
       id: user.id,
@@ -1160,7 +1162,7 @@ app.post("/api/auth/login", (req: any, res: any) => {
       fullName: user.fullName,
       role: user.role,
       employeeId: user.employeeId,
-      requirePasswordChange: user.requirePasswordChange
+      requirePasswordChange: requirePasswordChange
     };
     const tokenPayload = jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" });
 
@@ -1173,7 +1175,7 @@ app.post("/api/auth/login", (req: any, res: any) => {
       fullName: user.fullName,
       role: user.role,
       employeeId: user.employeeId,
-      requirePasswordChange: user.requirePasswordChange
+      requirePasswordChange: requirePasswordChange
     };
 
     res.json({
