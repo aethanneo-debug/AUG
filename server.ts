@@ -884,7 +884,7 @@ function getInitialData(): DBStructure {
       { id: "hb-2", fiscalYearId: "fy-2", approvedBudget: 5000000.00, carryOverBudget: 300000.00, totalUtilized: 3800000.00 }
     ],
     trainingBudgets: [
-      { id: "tb-1", fiscalYearId: "fy-1", totalBudget: 5000000.00 }
+      { id: "tb-1", fiscalYearId: "fy-1", carryOverBudget: 0, newAnnualBudget: 5000000.00, totalBudget: 5000000.00 }
     ],
     trainingPrograms: [],
     trainingParticipants: [],
@@ -933,12 +933,27 @@ app.post("/api/fiscal-years", authenticateToken, (req: any, res) => {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
   
-  const { label, start_date, end_date } = req.body;
+  // Bug Fix: Calculate next fiscal year strictly based on the latest existing year.
+  let maxYear = 2025; // Default if none exist
+  if (db.fiscalYears && db.fiscalYears.length > 0) {
+    const years = db.fiscalYears.map((fy: any) => parseInt(fy.label)).filter((y: number) => !isNaN(y));
+    if (years.length > 0) {
+      maxYear = Math.max(...years);
+    }
+  }
+  
+  const nextYearLabel = String(maxYear + 1);
+  
+  // Prevent duplicate creation
+  if (db.fiscalYears.find((fy: any) => fy.label === nextYearLabel)) {
+    return res.status(400).json({ status: "error", message: `Fiscal year ${nextYearLabel} already exists.` });
+  }
+
   const newFy = {
     id: `fy-${Date.now()}`,
-    label,
-    start_date,
-    end_date,
+    label: nextYearLabel,
+    start_date: `${nextYearLabel}-01-01`,
+    end_date: `${nextYearLabel}-12-31`,
     status: "Active",
     rollover_policy: "Standard"
   };
@@ -999,10 +1014,15 @@ app.post("/api/fiscal-years", authenticateToken, (req: any, res) => {
       
       const activeTrainingBudget = (db.trainingBudgets || []).find(b => b.fiscalYearId === activeFy.id);
       if (activeTrainingBudget) {
+        const allocatedBudget = activePrograms.reduce((sum, p) => sum + Number(p.allocatedBudget || 0), 0);
+        const carryOver = Math.max(0, Number(activeTrainingBudget.totalBudget || 0) - allocatedBudget);
+
         db.trainingBudgets = [...(db.trainingBudgets || []), {
           id: `atb-${Date.now()}`,
           fiscalYearId: newFy.id,
-          totalBudget: activeTrainingBudget.totalBudget
+          carryOverBudget: carryOver,
+          newAnnualBudget: 0,
+          totalBudget: carryOver
         }];
       }
     }
@@ -1061,6 +1081,10 @@ app.put("/api/budgets/:id", authenticateToken, (req: any, res) => {
   }
   const budget = db.budgetAllocations.find((b: any) => b.id === req.params.id);
   if (budget) {
+    const fy = db.fiscalYears.find((f: any) => f.id === budget.fiscalYearId);
+    if (fy && fy.status !== "Active") {
+      return res.status(400).json({ status: "error", message: "Cannot modify budget for a closed fiscal year." });
+    }
     if (req.body.budgetAllocation !== undefined) {
       budget.budgetAllocation = Number(req.body.budgetAllocation);
       budget.remainingBudget = budget.budgetAllocation + (budget.carryOver || 0) - budget.budgetUtilized - (budget.unliquidatedAdvances || 0);
@@ -1947,9 +1971,15 @@ app.get("/api/finance/budgets", authenticateToken, (req: any, res: any) => {
 });
 
 app.post("/api/finance/budgets", authenticateToken, (req: any, res) => {
-  const { department, budgetAllocation, allocatedPS, allocatedMOOE, allocatedCO, approvedRequestId } = req.body;
+  const { department, budgetAllocation, allocatedPS, allocatedMOOE, allocatedCO, approvedRequestId, fiscalYearId } = req.body;
   if ((req as any).user.role !== UserRole.SUPER_ADMIN && (req as any).user.role !== UserRole.BUDGET_OFFICER && (req as any).user.role !== UserRole.FINANCE_OFFICER) {
     return res.status(403).json({ status: "error", message: "Unauthorized. Requires Budget Officer or Admin." });
+  }
+
+  // Find target FY or default to active
+  const targetFy = fiscalYearId ? db.fiscalYears.find((f: any) => f.id === fiscalYearId) : (db.fiscalYears || []).find((f: any) => f.status === "Active");
+  if (!targetFy || targetFy.status !== "Active") {
+    return res.status(400).json({ status: "error", message: "Cannot create budget for a closed fiscal year." });
   }
 
   // Allow Budget Officer to create the initial budget allocation based on the GAA/WFP offline documents.
@@ -1957,12 +1987,11 @@ app.post("/api/finance/budgets", authenticateToken, (req: any, res) => {
   // but since we only allow one allocation per department per FY (see 'existing' check below),
   // this is always the initial creation. So we skip the approvedRequestId requirement here.
 
-  const existing = db.budgetAllocations.find(b => b.department.toLowerCase() === department.toLowerCase());
+  const existing = db.budgetAllocations.find(b => b.department.toLowerCase() === department.toLowerCase() && b.fiscalYearId === targetFy.id);
   if (existing) {
-    return res.status(400).json({ status: "error", message: "Allocation for department already exists. Please edit instead." });
+    return res.status(400).json({ status: "error", message: "Allocation for department already exists in this fiscal year. Please edit instead." });
   }
 
-  const activeFy = (db.fiscalYears || []).find((f: any) => f.status === "Active");
   const ps = Number(allocatedPS) || 0;
   const mooe = Number(allocatedMOOE) || 0;
   const co = Number(allocatedCO) || 0;
@@ -1971,7 +2000,7 @@ app.post("/api/finance/budgets", authenticateToken, (req: any, res) => {
 
   const newBudget: BudgetAllocation = {
     id: `b-${Date.now()}`,
-    fiscalYearId: activeFy?.id || "fy-1",
+    fiscalYearId: targetFy.id,
     department,
     budgetAllocation: finalBudgetAllocation,
     budgetUtilized: 0,
@@ -2005,6 +2034,11 @@ app.put("/api/finance/budgets/:id", authenticateToken, (req: any, res) => {
   const budget = db.budgetAllocations.find(b => b.id === id);
   if (!budget) {
     return res.status(404).json({ status: "error", message: "Budget allocation record not found" });
+  }
+
+  const fy = db.fiscalYears.find((f: any) => f.id === budget.fiscalYearId);
+  if (fy && fy.status !== "Active") {
+    return res.status(400).json({ status: "error", message: "Cannot modify budget for a closed fiscal year." });
   }
 
   const targetAmount = Number(budgetAllocation);
@@ -3534,15 +3568,27 @@ app.post("/api/training/budgets", authenticateToken, (req: any, res: any) => {
   if ((req as any).user.role !== UserRole.SUPER_ADMIN && (req as any).user.role !== UserRole.BUDGET_OFFICER) {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
-  const { fiscalYearId, totalBudget } = req.body;
+  const { fiscalYearId, newAnnualBudget, totalBudget } = req.body;
+  
+  const targetFy = db.fiscalYears.find((f: any) => f.id === fiscalYearId);
+  if (!targetFy || targetFy.status !== "Active") {
+    return res.status(400).json({ status: "error", message: "Cannot modify training budget for a closed fiscal year." });
+  }
+
+  // Backwards compatibility or direct override
+  const annualAmount = newAnnualBudget !== undefined ? parseFloat(newAnnualBudget) : parseFloat(totalBudget);
+  
   let budget = db.trainingBudgets.find(b => b.fiscalYearId === fiscalYearId);
   if (budget) {
-    budget.totalBudget = parseFloat(totalBudget);
+    budget.newAnnualBudget = annualAmount;
+    budget.totalBudget = (budget.carryOverBudget || 0) + annualAmount;
   } else {
     budget = {
       id: `tb-${Date.now()}`,
       fiscalYearId,
-      totalBudget: parseFloat(totalBudget)
+      carryOverBudget: 0,
+      newAnnualBudget: annualAmount,
+      totalBudget: annualAmount
     };
     db.trainingBudgets.push(budget);
   }

@@ -617,7 +617,7 @@ export default function FinanceView({
   const completedLiqCount = yearFilteredSubmissions.filter(s => s.status === "Completed").length;
   const totalApprovedLiqAmount = yearFilteredSubmissions.filter(s => s.status === "Completed").reduce((acc, s) => acc + s.totalSpent, 0);
 
-  const totalBudgetAllocationSum = budgets.reduce((acc, b) => acc + b.budgetAllocation, 0);
+  const totalBudgetAllocationSum = budgets.reduce((acc, b) => acc + b.budgetAllocation + (b.carryOver || 0), 0);
   const totalBudgetUtilizedSum = yearFilteredTxns.filter(t => t.status === "Validated" || t.status === "Liquidated").reduce((sum, t) => sum + t.amount, 0);
   const overallUtilizationPercent = totalBudgetAllocationSum > 0 ? Math.round((totalBudgetUtilizedSum / totalBudgetAllocationSum) * 100) : 0;
 
@@ -645,6 +645,8 @@ export default function FinanceView({
       alert("An error occurred");
     }
   };
+
+  const currentFy = fiscalYears.find(fy => fy.label === activeFiscalYear);
 
   return (
     <div id="finance-workstation-container" className="flex-1 flex flex-col overflow-hidden bg-slate-50">
@@ -837,7 +839,7 @@ export default function FinanceView({
 
                                                 <div className="flex justify-between items-center text-[10px] font-mono text-slate-500">
                           <span>Spent: {formatCurrency(obligations)}</span>
-                          <span>Allocation: {formatCurrency(b.budgetAllocation)}</span>
+                          <span>Total Allocation: {formatCurrency(b.budgetAllocation + (b.carryOver || 0))}</span>
                         </div>
                       </div>
                     );
@@ -1571,7 +1573,7 @@ export default function FinanceView({
                   <Calendar size={13} />
                   <span>FY {activeFiscalYear} ACTIVE</span>
                 </button>
-                {isBudgetOrAdmin && (
+                {isBudgetOrAdmin && currentFy?.status === "Active" && (
                   <button 
                     onClick={() => setIsConfirmingNewFy(true)}
                     className="bg-slate-100 hover:bg-slate-200 text-slate-900 text-[10px] font-bold py-2 px-3 uppercase tracking-wider rounded-lg border flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
@@ -1651,7 +1653,6 @@ export default function FinanceView({
             {innerBudgetTab === "allocations" && (
               <div className="space-y-6">
                 {(() => {
-                  const currentFy = fiscalYears.find(fy => fy.label === activeFiscalYear);
                   const tb = currentFy ? trainingBudgets.find(b => b.fiscalYearId === currentFy.id) : null;
                   const approved = tb ? tb.totalBudget : 0;
                   
@@ -1660,7 +1661,7 @@ export default function FinanceView({
                       <div className="flex-1 space-y-4">
                         <div className="flex justify-between items-center">
                           <h3 className="text-sm font-extrabold uppercase text-slate-800 font-mono tracking-wider">Annual Training & Seminar Expense Budget ({activeFiscalYear})</h3>
-                          {user.role === UserRole.BUDGET_OFFICER && (
+                          {user.role === UserRole.BUDGET_OFFICER && currentFy?.status === "Active" && (
                             editingTrainingBudget ? (
                               <div className="flex items-center space-x-2">
                                 <input
@@ -1676,7 +1677,7 @@ export default function FinanceView({
                                     if (!isNaN(val) && currentFy) {
                                       const res = await apiCall("/api/training/budgets", {
                                         method: "POST",
-                                        body: JSON.stringify({ fiscalYearId: currentFy.id, totalBudget: val })
+                                        body: JSON.stringify({ fiscalYearId: currentFy.id, newAnnualBudget: val })
                                       });
                                       if (res.status === "success") {
                                         const tbRes = await apiCall("/api/training/budgets");
@@ -1700,7 +1701,7 @@ export default function FinanceView({
                               <button
                                 onClick={() => {
                                   setEditingTrainingBudget(true);
-                                  setNewTrainingBudgetVal(approved.toString());
+                                  setNewTrainingBudgetVal((tb?.newAnnualBudget !== undefined ? tb.newAnnualBudget : ((tb?.totalBudget || 0) - (tb?.carryOverBudget || 0))).toString());
                                 }}
                                 className="text-[10px] uppercase font-mono tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 cursor-pointer"
                               >
@@ -1709,9 +1710,19 @@ export default function FinanceView({
                             )
                           )}
                         </div>
-                        <div className="flex items-end gap-3 border-b pb-4">
-                          <span className="text-4xl font-extrabold text-slate-800 tracking-tight">{formatCurrency(approved)}</span>
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Approved Allocation</span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+                          <div className="flex flex-col bg-slate-50 p-3 rounded-lg border">
+                            <span className="text-[10px] uppercase font-bold text-slate-500 mb-1">Carry Over Budget</span>
+                            <span className="text-xl font-bold text-teal-700 tracking-tight">{formatCurrency(tb?.carryOverBudget || 0)}</span>
+                          </div>
+                          <div className="flex flex-col bg-slate-50 p-3 rounded-lg border">
+                            <span className="text-[10px] uppercase font-bold text-slate-500 mb-1">New Annual Budget</span>
+                            <span className="text-xl font-bold text-blue-700 tracking-tight">{formatCurrency(tb?.newAnnualBudget !== undefined ? tb.newAnnualBudget : ((tb?.totalBudget || 0) - (tb?.carryOverBudget || 0)))}</span>
+                          </div>
+                          <div className="flex flex-col bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                            <span className="text-[10px] uppercase font-bold text-blue-800 mb-1">Overall Total Budget</span>
+                            <span className="text-2xl font-extrabold text-slate-900 tracking-tight">{formatCurrency(approved)}</span>
+                          </div>
                         </div>
                         <p className="text-xs text-slate-500">
                           This budget is managed by the Budget User. HR has read-only access and allocates portions of this budget when creating Training and Development Plans.
@@ -1809,13 +1820,15 @@ export default function FinanceView({
                 ) : (
                   <div className="flex justify-between items-center">
                     <p className="text-xs text-slate-500">Monitor budget requests, realignments, and supplemental fund requests filed by departments.</p>
-                    <button
-                      onClick={() => setIsAddBudgetRequestOpen(true)}
-                      className="bg-slate-900 hover:bg-slate-800 text-white font-mono text-[11px] px-3 py-1.5 rounded-lg flex items-center space-x-1 font-bold shadow-sm cursor-pointer"
-                    >
-                      <Plus size={13} />
-                      <span>Filing Supplemental Proposal</span>
-                    </button>
+                    {currentFy?.status === "Active" && (
+                      <button
+                        onClick={() => setIsAddBudgetRequestOpen(true)}
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-mono text-[11px] px-3 py-1.5 rounded-lg flex items-center space-x-1 font-bold shadow-sm cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Filing Supplemental Proposal</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1858,7 +1871,7 @@ export default function FinanceView({
                           </td>
                           <td className="p-4 text-center">
                             {req.status === "Pending" ? (
-                              user.role === UserRole.SUPER_ADMIN ? (
+                              user.role === UserRole.SUPER_ADMIN && currentFy?.status === "Active" ? (
                                 rejectingRequestId === req.id ? (
                                   <div className="flex flex-col items-center gap-1">
                                     <input
@@ -2190,7 +2203,7 @@ export default function FinanceView({
                        const obligations = txObligations + totalPayroll;
                        const disbursements = txDisbursements;
 
-                       totals.allotment += b.budgetAllocation;
+                       totals.allotment += b.budgetAllocation + (b.carryOver || 0);
                        totals.obligations += obligations;
                        totals.disbursements += disbursements;
                        return totals;
