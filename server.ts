@@ -3567,52 +3567,73 @@ app.put("/api/liquidation-submissions/:id/chief-action", authenticateToken, (req
 // ==========================================
 
 function autoAssignEmployeeToTraining(employee: Employee) {
-  const activeFy = db.fiscalYears.find(f => f.status === "Active");
-  if (!activeFy) return null;
+  try {
+    const activeFy = db.fiscalYears.find(f => f.status === "Active");
+    if (!activeFy) return null;
 
-  // Rule B check — already has a training this fiscal year?
-  const alreadyAssigned = (db.trainingParticipants || []).some(p => {
-    const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
-    return prog && prog.fiscalYear === activeFy.label && (p.employeeId === employee.id || p.employeeId === employee.employeeId);
-  });
-  if (alreadyAssigned) return null;
+    // Rule B check — already has a training this fiscal year?
+    const alreadyAssigned = (db.trainingParticipants || []).some(p => {
+      const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+      return prog && prog.fiscalYear === activeFy.label && (p.employeeId === employee.id || p.employeeId === employee.employeeId);
+    });
+    if (alreadyAssigned) return null;
 
-  const candidates = (db.trainingPrograms || []).filter(p =>
-    p.fiscalYear === activeFy.label &&
-    ((p.targetDivision && p.targetDivision === employee.division) ||
-     (p.targetSpecialization && p.targetSpecialization === employee.fieldOfSpecialization))
-  );
-  if (candidates.length === 0) return null;
+    const candidates = (db.trainingPrograms || []).filter(p =>
+      p.fiscalYear === activeFy.label &&
+      ((p.targetDivision && p.targetDivision === employee.division) ||
+       (p.targetSpecialization && p.targetSpecialization === employee.fieldOfSpecialization))
+    );
+    if (candidates.length === 0) return null;
 
-  const withOpenSeats = candidates.filter(p => {
-    const count = (db.trainingParticipants || []).filter(pt => pt.trainingProgramId === p.id).length;
-    return count < (p.maxParticipants || Infinity);
-  });
-  if (withOpenSeats.length === 0) return null; // nothing to assign into — leave for HR
+    const withOpenSeats = candidates.filter(p => {
+      const count = (db.trainingParticipants || []).filter(pt => pt.trainingProgramId === p.id).length;
+      return count < (p.maxParticipants || Infinity);
+    });
 
-  // 1. Specialization match beats division-only match.
-  // 2. If tied, pick earliest startDate
-  withOpenSeats.sort((a, b) => {
-    const aSpec = a.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
-    const bSpec = b.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
-    if (aSpec !== bSpec) return aSpec - bSpec;
-    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
-  });
+    if (withOpenSeats.length === 0) {
+      // Programs are at capacity - create notification for HR
+      const missedProgram = candidates[0];
+      const notif: Notification = {
+        id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        title: "Training Program at Capacity",
+        message: `New employee ${employee.fullName} matched training program "${missedProgram.title}" but it is at capacity. Please review manually.`,
+        type: "warning",
+        isRead: false,
+        timestamp: new Date().toISOString(),
+        targetRole: UserRole.HR_OFFICER
+      };
+      if (!db.notifications) db.notifications = [];
+      db.notifications.push(notif);
+      return null;
+    }
 
-  const chosen = withOpenSeats[0];
-  const part: TrainingParticipant = {
-    id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    trainingProgramId: chosen.id,
-    employeeId: employee.id,
-    status: "Assigned",
-    allowanceAllocated: chosen.allocatedBudget / Math.max(1, chosen.maxParticipants || 1)
-  };
-  if (!db.trainingParticipants) db.trainingParticipants = [];
-  db.trainingParticipants.push(part);
-  
-  logEvent("system", "system", UserRole.SUPER_ADMIN, "Auto-Assign Training",
-    `Auto-enrolled ${employee.fullName} (${employee.employeeId}) into "${chosen.title}" based on ${chosen.targetSpecialization === employee.fieldOfSpecialization ? "specialization" : "division"} match.`);
-  return part;
+    // 1. Specialization match beats division-only match.
+    // 2. If tied, pick earliest startDate
+    withOpenSeats.sort((a, b) => {
+      const aSpec = a.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
+      const bSpec = b.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
+      if (aSpec !== bSpec) return aSpec - bSpec;
+      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    });
+
+    const chosen = withOpenSeats[0];
+    const part: TrainingParticipant = {
+      id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      trainingProgramId: chosen.id,
+      employeeId: employee.id,
+      status: "Assigned",
+      allowanceAllocated: chosen.allocatedBudget / Math.max(1, chosen.maxParticipants || 1)
+    };
+    if (!db.trainingParticipants) db.trainingParticipants = [];
+    db.trainingParticipants.push(part);
+    
+    logEvent("system", "system", UserRole.SUPER_ADMIN, "Auto-Enroll Training Participant",
+      `Auto-enrolled ${employee.fullName} (${employee.employeeId}) into "${chosen.title}" based on ${chosen.targetSpecialization === employee.fieldOfSpecialization ? "specialization" : "division"} match.`);
+    return part;
+  } catch (error) {
+    console.error("Failed auto-enrolling employee to training program:", error);
+    return null;
+  }
 }
 
 app.get("/api/training/budgets", authenticateToken, (req: any, res: any) => {
@@ -3676,7 +3697,7 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
     title: body.title,
     description: body.description,
     category: body.category,
-    allocatedBudget: parseFloat(body.allocatedBudget),
+    allocatedBudget: parseFloat(body.allocatedBudget) || 0,
     usedBudget: 0,
     fiscalYear: body.fiscalYear,
     startDate: body.startDate,
@@ -3687,7 +3708,7 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
     totalHours: totalHours,
     venue: body.venue,
     facilitator: body.facilitator,
-    maxParticipants: parseInt(body.maxParticipants),
+    maxParticipants: parseInt(body.maxParticipants) || 1,
     targetSpecialization: body.targetSpecialization,
     targetDivision: body.targetDivision,
     createdAt: new Date().toISOString(),
@@ -3731,7 +3752,7 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
 
 
 app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) => {
-  if (req.user.role !== "Super Admin" && req.user.role !== "HR Officer") {
+  if (req.user.role !== UserRole.SUPER_ADMIN && req.user.role !== UserRole.HR_OFFICER && req.user.role !== "Super Admin" && req.user.role !== "HR Officer") {
     return res.status(403).json({ status: "error", message: "Unauthorized" });
   }
   const programIndex = (db.trainingPrograms || []).findIndex((p) => p.id === req.params.id);
@@ -3753,18 +3774,18 @@ app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) =>
     title: body.title,
     description: body.description,
     category: body.category,
-    allocatedBudget: parseFloat(body.allocatedBudget),
+    allocatedBudget: body.allocatedBudget !== undefined ? (parseFloat(body.allocatedBudget) || 0) : existingProgram.allocatedBudget,
     startDate: body.startDate,
     endDate: body.endDate,
-    startTime: body.startTime || existingProgram.startTime,
-    endTime: body.endTime || existingProgram.endTime,
+    startTime: body.startTime !== undefined ? body.startTime : existingProgram.startTime,
+    endTime: body.endTime !== undefined ? body.endTime : existingProgram.endTime,
     durationDays: diffDays,
     totalHours: totalHours,
-    venue: body.venue || existingProgram.venue,
-    facilitator: body.facilitator || existingProgram.facilitator,
-    maxParticipants: parseInt(body.maxParticipants) || existingProgram.maxParticipants,
-    targetDivision: body.targetDivision || existingProgram.targetDivision,
-    targetSpecialization: body.targetSpecialization || existingProgram.targetSpecialization
+    venue: body.venue !== undefined ? body.venue : existingProgram.venue,
+    facilitator: body.facilitator !== undefined ? body.facilitator : existingProgram.facilitator,
+    maxParticipants: body.maxParticipants !== undefined ? (parseInt(body.maxParticipants) || 1) : existingProgram.maxParticipants,
+    targetDivision: body.targetDivision !== undefined ? body.targetDivision : existingProgram.targetDivision,
+    targetSpecialization: body.targetSpecialization !== undefined ? body.targetSpecialization : existingProgram.targetSpecialization
   };
 
   let skippedMessages: string[] = [];

@@ -141,12 +141,18 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
       method = "PUT";
     }
 
-    const res = await apiCall(endpoint, {
-      method,
-      body: JSON.stringify(row)
-    });
+    let res;
+    try {
+      res = await apiCall(endpoint, {
+        method,
+        body: JSON.stringify(row)
+      });
+    } catch (err: any) {
+      alert("Error saving training program: " + err.message);
+      return;
+    }
 
-    if (res.status === "success") {
+    if (res && res.status === "success") {
       if (isNew) {
         setNewRows(newRows.filter(r => r.id !== id));
       } else {
@@ -198,18 +204,6 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
           if (field === 'endDate' && updated.startDate && new Date(value) < new Date(updated.startDate)) {
             updated.startDate = value;
           }
-          // Smart participant suggestions based on category update
-          if (field === 'category') {
-             let targetDiv = "";
-             if (value.toLowerCase().includes("judicial") || value.toLowerCase().includes("adjudication")) {
-               targetDiv = "Adjudication Division";
-             } else if (value.toLowerCase().includes("legal")) {
-               targetDiv = "Legal Division";
-             } else if (value.toLowerCase().includes("finance") || value.toLowerCase().includes("admin")) {
-               targetDiv = "Administrative and Finance Division";
-             }
-             if (targetDiv) updated.targetDivision = targetDiv;
-          }
           return updated;
         }
         return r;
@@ -222,17 +216,6 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
       }
       if (field === 'endDate' && updated.startDate && new Date(value) < new Date(updated.startDate)) {
         updated.startDate = value;
-      }
-      if (field === 'category') {
-         let targetDiv = "";
-         if (value.toLowerCase().includes("judicial") || value.toLowerCase().includes("adjudication")) {
-           targetDiv = "Adjudication Division";
-         } else if (value.toLowerCase().includes("legal")) {
-           targetDiv = "Legal Division";
-         } else if (value.toLowerCase().includes("finance") || value.toLowerCase().includes("admin")) {
-           targetDiv = "Administrative and Finance Division";
-         }
-         if (targetDiv) updated.targetDivision = targetDiv;
       }
       setEditingRows({ ...editingRows, [id]: updated });
     }
@@ -321,15 +304,33 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
         </td>
         <td className="p-3">
           {isEditing ? (
-            <select value={row.category} onChange={e => updateRow(p.id, "category", e.target.value, isNew)} className="w-full text-sm border border-slate-300 rounded px-2 py-1 bg-white">
-              <option>Technical</option>
-              <option>Leadership</option>
-              <option>Administrative</option>
-              <option>Legal/Judicial</option>
-              <option>Mandatory</option>
-            </select>
+            <div className="flex flex-col gap-1">
+              <select value={row.category} onChange={e => updateRow(p.id, "category", e.target.value, isNew)} className="w-full text-sm border border-slate-300 rounded px-2 py-1 bg-white">
+                <option>Technical</option>
+                <option>Leadership</option>
+                <option>Administrative</option>
+                <option>Legal/Judicial</option>
+                <option>Mandatory</option>
+              </select>
+              <select value={row.targetDivision || ""} onChange={e => updateRow(p.id, "targetDivision", e.target.value, isNew)} className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-slate-600">
+                <option value="">-- No Target Division --</option>
+                <option value="Administrative and Finance Division">Administrative and Finance Division</option>
+                <option value="Legal Division">Legal Division</option>
+                <option value="Adjudication Division">Adjudication Division</option>
+                <option value="Technical Division">Technical Division</option>
+              </select>
+              <input type="text" value={row.targetSpecialization || ""} onChange={e => updateRow(p.id, "targetSpecialization", e.target.value, isNew)} className="w-full text-xs border border-slate-300 rounded px-2 py-1 bg-white text-slate-600" placeholder="Target Specialization..." />
+            </div>
           ) : (
-            <span className="inline-block px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded">{p.category}</span>
+            <div className="flex flex-col gap-1 items-start">
+              <span className="inline-block px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded">{p.category}</span>
+              {p.targetDivision && (
+                <span className="text-[10px] text-slate-500 font-medium">Div: {p.targetDivision}</span>
+              )}
+              {p.targetSpecialization && (
+                <span className="text-[10px] text-slate-500 font-medium">Spec: {p.targetSpecialization}</span>
+              )}
+            </div>
           )}
         </td>
         <td className="p-3">
