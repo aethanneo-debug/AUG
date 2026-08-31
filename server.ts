@@ -1414,6 +1414,7 @@ app.post("/api/employees", authenticateToken, (req: any, res) => {
     contactNumber: data.contactNumber,
     emergencyContactName: data.emergencyContactName,
     emergencyContactPhone: data.emergencyContactPhone,
+    fieldOfSpecialization: data.fieldOfSpecialization,
     pdsFieldName: data.pdsFieldName || undefined,
     pdsUploadedAt: data.pdsFieldName ? new Date().toISOString() : undefined
   };
@@ -1435,6 +1436,9 @@ app.post("/api/employees", authenticateToken, (req: any, res) => {
   // Removed auto-generation based on requirements: Employee accounts should not be automatically created; they require administrator onboarding.
 
   logEvent((req as any).user.id, (req as any).user.username, (req as any).user.role, "Create Employee", `Registered new personnel ${newEmployee.fullName} (${newEmployee.employeeId})`);
+  
+  autoAssignEmployeeToTraining(newEmployee);
+  
   saveDB();
   res.json({ status: "success", data: newEmployee });
 });
@@ -1496,6 +1500,8 @@ app.put("/api/employees/:id", authenticateToken, (req: any, res) => {
   };
 
   db.employees[index] = updatedEmployee;
+
+  autoAssignEmployeeToTraining(updatedEmployee);
 
   logEvent((req as any).user.id, (req as any).user.username, (req as any).user.role, "Update Employee", `Updated professional profile of ${updatedEmployee.fullName} (${updatedEmployee.employeeId}). Changes: ${changes.join(", ") || "Contact info"}`);
   saveDB();
@@ -3560,6 +3566,55 @@ app.put("/api/liquidation-submissions/:id/chief-action", authenticateToken, (req
 // TRAINING & DEVELOPMENT MANAGEMENT SYSTEM
 // ==========================================
 
+function autoAssignEmployeeToTraining(employee: Employee) {
+  const activeFy = db.fiscalYears.find(f => f.status === "Active");
+  if (!activeFy) return null;
+
+  // Rule B check — already has a training this fiscal year?
+  const alreadyAssigned = (db.trainingParticipants || []).some(p => {
+    const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+    return prog && prog.fiscalYear === activeFy.label && (p.employeeId === employee.id || p.employeeId === employee.employeeId);
+  });
+  if (alreadyAssigned) return null;
+
+  const candidates = (db.trainingPrograms || []).filter(p =>
+    p.fiscalYear === activeFy.label &&
+    ((p.targetDivision && p.targetDivision === employee.division) ||
+     (p.targetSpecialization && p.targetSpecialization === employee.fieldOfSpecialization))
+  );
+  if (candidates.length === 0) return null;
+
+  const withOpenSeats = candidates.filter(p => {
+    const count = (db.trainingParticipants || []).filter(pt => pt.trainingProgramId === p.id).length;
+    return count < (p.maxParticipants || Infinity);
+  });
+  if (withOpenSeats.length === 0) return null; // nothing to assign into — leave for HR
+
+  // 1. Specialization match beats division-only match.
+  // 2. If tied, pick earliest startDate
+  withOpenSeats.sort((a, b) => {
+    const aSpec = a.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
+    const bSpec = b.targetSpecialization === employee.fieldOfSpecialization ? 0 : 1;
+    if (aSpec !== bSpec) return aSpec - bSpec;
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
+
+  const chosen = withOpenSeats[0];
+  const part: TrainingParticipant = {
+    id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    trainingProgramId: chosen.id,
+    employeeId: employee.id,
+    status: "Assigned",
+    allowanceAllocated: chosen.allocatedBudget / Math.max(1, chosen.maxParticipants || 1)
+  };
+  if (!db.trainingParticipants) db.trainingParticipants = [];
+  db.trainingParticipants.push(part);
+  
+  logEvent("system", "system", UserRole.SUPER_ADMIN, "Auto-Assign Training",
+    `Auto-enrolled ${employee.fullName} (${employee.employeeId}) into "${chosen.title}" based on ${chosen.targetSpecialization === employee.fieldOfSpecialization ? "specialization" : "division"} match.`);
+  return part;
+}
+
 app.get("/api/training/budgets", authenticateToken, (req: any, res: any) => {
   res.json({ status: "success", data: db.trainingBudgets || [] });
 });
@@ -3640,9 +3695,24 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
 
   db.trainingPrograms.push(newProgram);
   
+  let skippedMessages: string[] = [];
   // Manual assignment from UI
   if (Array.isArray(body.participantIds)) {
+    let enrolledCount = 0;
     body.participantIds.forEach(empId => {
+      if (enrolledCount >= (newProgram.maxParticipants || Infinity)) {
+        skippedMessages.push(`${empId} skipped: program reached capacity.`);
+        return;
+      }
+      const alreadyAssigned = (db.trainingParticipants || []).some(p => {
+        const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+        return prog && prog.fiscalYear === newProgram.fiscalYear && p.employeeId === empId;
+      });
+      if (alreadyAssigned) {
+        skippedMessages.push(`${empId} skipped: already assigned to a training this fiscal year.`);
+        return;
+      }
+      if (!db.trainingParticipants) db.trainingParticipants = [];
       db.trainingParticipants.push({
         id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         trainingProgramId: newProgram.id,
@@ -3650,11 +3720,12 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
         status: "Assigned",
         allowanceAllocated: newProgram.allocatedBudget / Math.max(1, newProgram.maxParticipants || 1)
       });
+      enrolledCount++;
     });
   }
 
   saveDB();
-  res.json({ status: "success", data: newProgram });
+  res.json({ status: "success", data: newProgram, message: skippedMessages.length > 0 ? skippedMessages.join(" ") : undefined });
 });
 
 
@@ -3696,10 +3767,24 @@ app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) =>
     targetSpecialization: body.targetSpecialization || existingProgram.targetSpecialization
   };
 
+  let skippedMessages: string[] = [];
   // If participantIds are provided, update them
   if (body.participantIds) {
     db.trainingParticipants = (db.trainingParticipants || []).filter(p => p.trainingProgramId !== req.params.id);
+    let enrolledCount = 0;
     for (const empId of body.participantIds) {
+      if (enrolledCount >= (db.trainingPrograms[programIndex].maxParticipants || Infinity)) {
+        skippedMessages.push(`${empId} skipped: program reached capacity.`);
+        continue;
+      }
+      const alreadyAssigned = (db.trainingParticipants || []).some(p => {
+        const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+        return prog && prog.fiscalYear === db.trainingPrograms[programIndex].fiscalYear && p.employeeId === empId;
+      });
+      if (alreadyAssigned) {
+        skippedMessages.push(`${empId} skipped: already assigned to a training this fiscal year.`);
+        continue;
+      }
       db.trainingParticipants.push({
         id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         trainingProgramId: req.params.id,
@@ -3707,11 +3792,12 @@ app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) =>
         status: "Assigned",
         allowanceAllocated: parseFloat(body.allocatedBudget) / Math.max(body.participantIds.length, 1)
       });
+      enrolledCount++;
     }
   }
 
   saveDB();
-  res.json({ status: "success", data: db.trainingPrograms[programIndex] });
+  res.json({ status: "success", data: db.trainingPrograms[programIndex], message: skippedMessages.length > 0 ? skippedMessages.join(" ") : undefined });
 });
 
 app.delete("/api/training/programs/:id", authenticateToken, (req: any, res: any) => {
@@ -3756,13 +3842,22 @@ app.get("/api/training/participants", authenticateToken, (req: any, res: any) =>
 app.post("/api/training/participants", authenticateToken, (req: any, res: any) => {
   const { trainingProgramId, employeeId } = req.body;
   const prog = db.trainingPrograms.find(p => p.id === trainingProgramId);
-  
-  const existing = db.trainingParticipants.find(p => p.trainingProgramId === trainingProgramId && p.employeeId === employeeId);
-  if (existing) {
-    return res.status(400).json({ status: "error", message: "Already assigned" });
+  if (!prog) return res.status(404).json({ status: "error", message: "Program not found" });
+
+  const enrolledCount = (db.trainingParticipants || []).filter(p => p.trainingProgramId === trainingProgramId).length;
+  if (enrolledCount >= (prog.maxParticipants || Infinity)) {
+    return res.status(400).json({ status: "error", message: "Program has reached maximum capacity" });
   }
 
-  const allowance = prog ? (prog.allocatedBudget / Math.max(1, prog.maxParticipants || 1)) : 1500;
+  const alreadyAssigned = (db.trainingParticipants || []).some(p => {
+    const pProg = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+    return pProg && pProg.fiscalYear === prog.fiscalYear && p.employeeId === employeeId;
+  });
+  if (alreadyAssigned) {
+    return res.status(400).json({ status: "error", message: "Employee is already assigned to a training this fiscal year" });
+  }
+
+  const allowance = prog.allocatedBudget / Math.max(1, prog.maxParticipants || 1);
   
   const part: TrainingParticipant = {
     id: `part-${Date.now()}`,
@@ -3771,6 +3866,7 @@ app.post("/api/training/participants", authenticateToken, (req: any, res: any) =
     status: "Assigned",
     allowanceAllocated: allowance
   };
+  if (!db.trainingParticipants) db.trainingParticipants = [];
   db.trainingParticipants.push(part);
   saveDB();
   res.json({ status: "success", data: part });

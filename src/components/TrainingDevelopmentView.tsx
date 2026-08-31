@@ -558,13 +558,26 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
                         {division}
                       </div>
                       <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {divEmps.map(emp => (
-                          <label key={emp.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition-colors ${participantModalData.selectedIds.includes(emp.id) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}>
+                        {divEmps.map(emp => {
+                          let alreadyAssignedToTitle = "";
+                          const existingAssignment = participants.find(p => (p.employeeId === emp.id || p.employeeId === emp.employeeId) && p.trainingProgramId !== participantModalData.rowId);
+                          if (existingAssignment) {
+                            const pProg = programs.find(p => p.id === existingAssignment.trainingProgramId);
+                            if (pProg && pProg.fiscalYear === activeFy?.label) {
+                              alreadyAssignedToTitle = pProg.title;
+                            }
+                          }
+                          const isAlreadyAssigned = !!alreadyAssignedToTitle;
+                          const isChecked = participantModalData.selectedIds.includes(emp.id);
+                          const isDisabled = isAlreadyAssigned || (!isChecked && participantModalData.selectedIds.length >= parseInt(participantModalData.max));
+
+                          return (
+                          <label key={emp.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition-colors ${isChecked ? 'bg-blue-50 border border-blue-200' : (isAlreadyAssigned ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 border border-transparent')}`}>
                             <input 
                               type="checkbox" 
                               className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              checked={participantModalData.selectedIds.includes(emp.id)}
-                              disabled={!participantModalData.selectedIds.includes(emp.id) && participantModalData.selectedIds.length >= parseInt(participantModalData.max)}
+                              checked={isChecked}
+                              disabled={isDisabled}
                               onChange={(e) => {
                                 if (e.target.checked) {
                                   if (participantModalData.selectedIds.length >= parseInt(participantModalData.max)) {
@@ -586,9 +599,11 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
                             <div>
                               <p className="text-sm font-medium text-slate-800">{emp.fullName}</p>
                               <p className="text-xs text-slate-500">{emp.position}</p>
+                              {isAlreadyAssigned && <p className="text-xs text-red-500 font-semibold mt-1">Already assigned — {alreadyAssignedToTitle}</p>}
                             </div>
                           </label>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
