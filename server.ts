@@ -3566,17 +3566,56 @@ app.put("/api/liquidation-submissions/:id/chief-action", authenticateToken, (req
 // TRAINING & DEVELOPMENT MANAGEMENT SYSTEM
 // ==========================================
 
+function employeeAlreadyHasTrainingThisYear(employeeId: string, fiscalYear: string): boolean {
+  if (!db.trainingParticipants) return false;
+  return db.trainingParticipants.some(p => {
+    if (p.employeeId !== employeeId) return false;
+    if (p.status === "Cancelled") return false;
+    
+    const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
+    return prog && prog.fiscalYear === fiscalYear;
+  });
+}
+
+function computeTrainingHours(startDate: string, endDate: string, startTime?: string, endTime?: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  if (startTime && endTime) {
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+    if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+      const startDec = startH + (startM / 60);
+      const endDec = endH + (endM / 60);
+      const hoursPerDay = Math.max(0, endDec - startDec);
+      if (hoursPerDay > 0) {
+        return hoursPerDay * diffDays;
+      }
+    }
+  }
+  
+  return diffDays * 8;
+}
+
 function autoAssignEmployeeToTraining(employee: Employee) {
   try {
     const activeFy = db.fiscalYears.find(f => f.status === "Active");
     if (!activeFy) return null;
 
     // Rule B check — already has a training this fiscal year?
-    const alreadyAssigned = (db.trainingParticipants || []).some(p => {
-      const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
-      return prog && prog.fiscalYear === activeFy.label && (p.employeeId === employee.id || p.employeeId === employee.employeeId);
-    });
-    if (alreadyAssigned) return null;
+    const alreadyAssigned = employeeAlreadyHasTrainingThisYear(employee.id, activeFy.label) || 
+                            (employee.employeeId && employeeAlreadyHasTrainingThisYear(employee.employeeId, activeFy.label));
+    
+    if (alreadyAssigned) {
+      logEvent(
+        "system", "System", "System",
+        "Training Enrollment Blocked - Annual Limit",
+        `Employee ${employee.fullName} was not auto-enrolled because they already have a training program for ${activeFy.label}.`
+      );
+      return null;
+    }
 
     const candidates = (db.trainingPrograms || []).filter(p =>
       p.fiscalYear === activeFy.label &&
@@ -3689,8 +3728,7 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
   
-  // Basic total hours calculation based on diffDays * 8 hours
-  const totalHours = diffDays * 8; 
+  const totalHours = computeTrainingHours(body.startDate, body.endDate, body.startTime, body.endTime); 
 
   const newProgram: TrainingProgram = {
     id: `tp-${Date.now()}`,
@@ -3725,12 +3763,14 @@ app.post("/api/training/programs", authenticateToken, (req: any, res: any) => {
         skippedMessages.push(`${empId} skipped: program reached capacity.`);
         return;
       }
-      const alreadyAssigned = (db.trainingParticipants || []).some(p => {
-        const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
-        return prog && prog.fiscalYear === newProgram.fiscalYear && p.employeeId === empId;
-      });
+      const alreadyAssigned = employeeAlreadyHasTrainingThisYear(empId, newProgram.fiscalYear);
       if (alreadyAssigned) {
         skippedMessages.push(`${empId} skipped: already assigned to a training this fiscal year.`);
+        logEvent(
+          (req as any).user.id, (req as any).user.username, (req as any).user.role,
+          "Training Enrollment Blocked - Annual Limit",
+          `Employee ID ${empId} was blocked from manual enrollment in program "${newProgram.title}" because they already have a training program for ${newProgram.fiscalYear}.`
+        );
         return;
       }
       if (!db.trainingParticipants) db.trainingParticipants = [];
@@ -3765,9 +3805,11 @@ app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) =>
   const end = new Date(body.endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  const totalHours = diffDays * 8;
-
   const existingProgram = db.trainingPrograms[programIndex];
+  
+  const startTime = body.startTime !== undefined ? body.startTime : existingProgram.startTime;
+  const endTime = body.endTime !== undefined ? body.endTime : existingProgram.endTime;
+  const totalHours = computeTrainingHours(body.startDate, body.endDate, startTime, endTime);
 
   db.trainingPrograms[programIndex] = {
     ...existingProgram,
@@ -3798,12 +3840,14 @@ app.put("/api/training/programs/:id", authenticateToken, (req: any, res: any) =>
         skippedMessages.push(`${empId} skipped: program reached capacity.`);
         continue;
       }
-      const alreadyAssigned = (db.trainingParticipants || []).some(p => {
-        const prog = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
-        return prog && prog.fiscalYear === db.trainingPrograms[programIndex].fiscalYear && p.employeeId === empId;
-      });
+      const alreadyAssigned = employeeAlreadyHasTrainingThisYear(empId, db.trainingPrograms[programIndex].fiscalYear);
       if (alreadyAssigned) {
         skippedMessages.push(`${empId} skipped: already assigned to a training this fiscal year.`);
+        logEvent(
+          (req as any).user.id, (req as any).user.username, (req as any).user.role,
+          "Training Enrollment Blocked - Annual Limit",
+          `Employee ID ${empId} was blocked from manual enrollment in program "${db.trainingPrograms[programIndex].title}" because they already have a training program for ${db.trainingPrograms[programIndex].fiscalYear}.`
+        );
         continue;
       }
       db.trainingParticipants.push({
@@ -3870,12 +3914,14 @@ app.post("/api/training/participants", authenticateToken, (req: any, res: any) =
     return res.status(400).json({ status: "error", message: "Program has reached maximum capacity" });
   }
 
-  const alreadyAssigned = (db.trainingParticipants || []).some(p => {
-    const pProg = (db.trainingPrograms || []).find(tp => tp.id === p.trainingProgramId);
-    return pProg && pProg.fiscalYear === prog.fiscalYear && p.employeeId === employeeId;
-  });
+  const alreadyAssigned = employeeAlreadyHasTrainingThisYear(employeeId, prog.fiscalYear);
   if (alreadyAssigned) {
-    return res.status(400).json({ status: "error", message: "Employee is already assigned to a training this fiscal year" });
+    logEvent(
+      (req as any).user.id, (req as any).user.username, (req as any).user.role,
+      "Training Enrollment Blocked - Annual Limit",
+      `Employee ID ${employeeId} was blocked from manual enrollment in program "${prog.title}" because they already have a training program for ${prog.fiscalYear}.`
+    );
+    return res.status(400).json({ status: "error", message: `Employee already has a training program for ${prog.fiscalYear}.` });
   }
 
   const allowance = prog.allocatedBudget / Math.max(1, prog.maxParticipants || 1);

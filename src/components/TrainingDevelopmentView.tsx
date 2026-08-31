@@ -561,12 +561,13 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
                       <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                         {divEmps.map(emp => {
                           let alreadyAssignedToTitle = "";
-                          const existingAssignment = participants.find(p => (p.employeeId === emp.id || p.employeeId === emp.employeeId) && p.trainingProgramId !== participantModalData.rowId);
-                          if (existingAssignment) {
-                            const pProg = programs.find(p => p.id === existingAssignment.trainingProgramId);
-                            if (pProg && pProg.fiscalYear === activeFy?.label) {
-                              alreadyAssignedToTitle = pProg.title;
-                            }
+                          const existingAssignments = participants.filter(p => (p.employeeId === emp.id || p.employeeId === emp.employeeId) && p.trainingProgramId !== participantModalData.rowId && p.status !== "Cancelled");
+                          const activeAssignment = existingAssignments.find(p => {
+                            const pProg = programs.find(prog => prog.id === p.trainingProgramId);
+                            return pProg && pProg.fiscalYear === activeFy?.label;
+                          });
+                          if (activeAssignment) {
+                            alreadyAssignedToTitle = programs.find(p => p.id === activeAssignment.trainingProgramId)?.title || "Another Program";
                           }
                           const isAlreadyAssigned = !!alreadyAssignedToTitle;
                           const isChecked = participantModalData.selectedIds.includes(emp.id);
