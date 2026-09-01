@@ -3940,7 +3940,25 @@ app.post("/api/training/participants", authenticateToken, (req: any, res: any) =
 });
 
 app.get("/api/training/liquidations", authenticateToken, (req: any, res: any) => {
-  res.json({ status: "success", data: db.trainingLiquidations || [] });
+  const { trainingProgramId } = req.query;
+  let liquidations = db.trainingLiquidations || [];
+  
+  if (trainingProgramId) {
+    liquidations = liquidations.filter(l => l.trainingProgramId === trainingProgramId);
+    const breakdown = liquidations.reduce((acc, curr) => {
+      acc[curr.expenseCategory] = (acc[curr.expenseCategory] || 0) + curr.amount;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const breakdownArray = Object.keys(breakdown).map(category => ({
+      category,
+      total: breakdown[category]
+    }));
+
+    return res.json({ status: "success", data: liquidations, breakdown: breakdownArray });
+  }
+
+  res.json({ status: "success", data: liquidations });
 });
 
 app.post("/api/training/liquidations", authenticateToken, (req: any, res: any) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UserRole, TrainingProgram, TrainingParticipant, TrainingLiquidationExpense, Employee } from "../types";
 import { apiCall } from "../utils";
-import { BookOpen, Calendar, DollarSign, Users, Plus, Target, Building, FileText, CheckCircle2, Edit2, Trash2, Save, X, AlertTriangle } from "lucide-react";
+import { BookOpen, Calendar, DollarSign, Users, Plus, Target, Building, FileText, CheckCircle2, Edit2, Trash2, Save, X, AlertTriangle, PieChart } from "lucide-react";
 
 export default function TrainingDevelopmentView({ user, triggerRefresh }: { user: any, triggerRefresh: () => void }) {
   const [programs, setPrograms] = useState<TrainingProgram[]>([]);
@@ -21,6 +21,11 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
   const [newRows, setNewRows] = useState<any[]>([]);
   const [showParticipantModal, setShowParticipantModal] = useState<string | null>(null); // row id or "new-index"
   const [participantModalData, setParticipantModalData] = useState<any>(null); // To hold participants for the modal
+  
+  const [showBreakdownModal, setShowBreakdownModal] = useState<string | null>(null);
+  const [breakdownData, setBreakdownData] = useState<{ category: string; total: number }[]>([]);
+  const [breakdownProgram, setBreakdownProgram] = useState<any>(null);
+  const [breakdownTotal, setBreakdownTotal] = useState<number>(0);
   
   // Liquidation form
   const [expenseCategory, setExpenseCategory] = useState("Meals");
@@ -257,6 +262,17 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
     setShowParticipantModal(null);
   };
 
+  const openBreakdownModal = async (p: any) => {
+    setBreakdownProgram(p);
+    const res = await apiCall(`/api/training/liquidations?trainingProgramId=${p.id}`);
+    if (res.status === "success") {
+      setBreakdownData(res.breakdown || []);
+      const sum = (res.breakdown || []).reduce((acc: number, curr: any) => acc + curr.total, 0);
+      setBreakdownTotal(sum);
+      setShowBreakdownModal(p.id);
+    }
+  };
+
   async function handleCreateLiquidation(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
@@ -355,6 +371,7 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
           ) : (
             <div className="text-sm text-slate-600">
               {p.startDate} {p.startTime} <br/>to {p.endDate} {p.endTime}
+              <div className="mt-1 font-medium text-indigo-600">({p.totalHours} hrs)</div>
             </div>
           )}
         </td>
@@ -423,6 +440,9 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
             <div className="flex gap-2">
               <button onClick={() => startEditing(p)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Edit">
                 <Edit2 size={16} />
+              </button>
+              <button onClick={() => openBreakdownModal(p)} className="p-1.5 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100" title="Liquidation Breakdown">
+                <PieChart size={16} />
               </button>
               <button onClick={() => handleDeleteProgram(p.id, false)} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100" title="Delete">
                 <Trash2 size={16} />
@@ -616,6 +636,75 @@ export default function TrainingDevelopmentView({ user, triggerRefresh }: { user
             <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
               <button onClick={() => setShowParticipantModal(null)} className="px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
               <button onClick={handleSaveParticipants} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm Participants</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBreakdownModal && breakdownProgram && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <h3 className="text-lg font-semibold text-slate-800">Liquidation Expense Breakdown</h3>
+              <button onClick={() => setShowBreakdownModal(null)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="mb-4">
+                <h4 className="text-sm font-bold text-slate-700">{breakdownProgram.title}</h4>
+                <p className="text-xs text-slate-500">Total Program Allocated Budget: ₱{Number(breakdownProgram.allocatedBudget).toLocaleString()}</p>
+              </div>
+
+              {breakdownData.length === 0 ? (
+                <div className="text-center p-6 text-slate-500 text-sm border border-dashed border-slate-300 rounded-lg bg-slate-50">
+                  <PieChart size={32} className="mx-auto text-slate-400 mb-2" />
+                  <p>No liquidation expenses have been filed for this program yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <table className="w-full text-left text-sm border border-slate-200 rounded-lg overflow-hidden">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-2 font-semibold text-slate-600">Expense Category</th>
+                        <th className="px-4 py-2 font-semibold text-slate-600 text-right">Amount Liquidated</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {breakdownData.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 text-slate-700">{item.category}</td>
+                          <td className="px-4 py-3 text-right font-medium text-slate-700">₱{Number(item.total).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                      <tr>
+                        <td className="px-4 py-3 text-slate-800">Total Liquidated</td>
+                        <td className="px-4 py-3 text-right text-blue-700">₱{Number(breakdownTotal).toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {/* Visual Bar representation */}
+                  <div className="mt-6">
+                    <h5 className="text-xs font-semibold text-slate-500 uppercase mb-2">Budget Utilization</h5>
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+                      <div 
+                        className={`h-full ${breakdownTotal > breakdownProgram.allocatedBudget ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                        style={{ width: `${Math.min(100, (breakdownTotal / breakdownProgram.allocatedBudget) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs mt-1 text-slate-500">
+                      <span>₱{Number(breakdownTotal).toLocaleString()} used</span>
+                      <span>{((breakdownTotal / Math.max(1, breakdownProgram.allocatedBudget)) * 100).toFixed(1)}% of ₱{Number(breakdownProgram.allocatedBudget).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+              <button onClick={() => setShowBreakdownModal(null)} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 font-medium">Close</button>
             </div>
           </div>
         </div>
